@@ -9,13 +9,11 @@ AlphaTrader is a sophisticated, monospace-styled terminal for real-time market d
 A dedicated research engine that aggregates global signals and transforms them into actionable market insights.
 
 ### 2. Alpha Scanner (Discovery)
-![Alpha Scanner]
-(screenshots/alpha_scanner.png)
+![Alpha Scanner](screenshots/alpha_scanner.png)
 An autonomous discovery engine that works in the background to surface high-probability edges.
 
 ### 3. Trading Terminal (Execution)
-![AlphaTrader Terminal]
-(screenshots/terminal_chart.png)
+![AlphaTrader Terminal](screenshots/terminal_chart.png)
 The main workspace for manual analysis and trade management.
 *   **Professional Charting**: High-performance candlestick charts powered by Lightweight Charts.
 *   **News Spike Correlation**: Visual indicators directly on the chart (red circle markers) linking enriched news events to specific price actions.

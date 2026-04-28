@@ -1,0 +1,25 @@
+# Environment and Secrets
+.env
+
+# Dependencies
+node_modules/
+
+# Python
+__pycache__/
+*.pyc
+.ruff_cache/
+
+# Databases and User Data
+detector.db
+portfolios.json
+
+# Build and IDE
+dist/
+.DS_Store
+.vscode/
+.idea/
+
+# Testing and Screenshots
+*.png
+tasks/scratch/
+llms.txt

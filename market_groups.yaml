@@ -1,0 +1,20 @@
+groups:
+  - name: "2028 US Presidential Primary"
+    type: "exhaustive"
+    keywords: ["2028 Republican primary", "2028 Democratic primary"]
+    threshold: 0.05
+
+  - name: "FOMC Rate Decisions"
+    type: "exhaustive"
+    keywords: ["Fed cuts rates", "Fed holds rates", "Fed hikes rates"]
+    threshold: 0.03
+
+  - name: "Bitcoin Price Milestones"
+    type: "ordered_ascending"
+    keywords: ["Bitcoin hits $100K", "Bitcoin hits $150K", "Bitcoin hits $200K"]
+    threshold: 0.02
+
+  - name: "NBA Championship Winner"
+    type: "exhaustive"
+    keywords: ["win the 2026 NBA Championship"]
+    threshold: 0.08

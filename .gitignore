@@ -1,6 +1,9 @@
 # Environment and Secrets
 .env
 
+# Private Documentation
+app_plan/
+
 # Dependencies
 node_modules/
 

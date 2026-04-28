@@ -24,5 +24,6 @@ dist/
 
 # Testing and Screenshots
 *.png
+!screenshots/*.png
 tasks/scratch/
 llms.txt

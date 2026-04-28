@@ -3,7 +3,7 @@ import httpx
 import os
 from datetime import datetime
 from dotenv import load_dotenv
-from detector_engine import (
+from .detector_engine import (
     DetectorDB,
     ArbScanner,
     GroqEstimator,

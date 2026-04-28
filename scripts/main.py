@@ -20,13 +20,13 @@ from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-from news_engine import NewsEngine
+from .news_engine import NewsEngine
 from py_clob_client_v2.client import ClobClient
 
 from py_clob_client_v2.clob_types import ApiCreds, OrderArgs
 from py_clob_client_v2.order_builder.constants import BUY, SELL
 
-from detector_engine import (
+from .detector_engine import (
     DetectorDB,
     ArbScanner,
     GroqEstimator,

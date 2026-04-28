@@ -5,20 +5,15 @@ AlphaTrader is a sophisticated, monospace-styled terminal for real-time market d
 ## 🚀 Core Modules
 
 ### 1. News Edge (Intelligence)
+![News Edge](screenshots/news_edge.png)
 A dedicated research engine that aggregates global signals and transforms them into actionable market insights.
-*   **On-Demand Research**: Selecting any market triggers a targeted search via Google News RSS.
-*   **AI Enrichment**: Summarizes headlines and assigns a **Probability Impact Score (PIS)** using **Groq (Llama 3.3)**.
-*   **Chart Correlation**: High-impact news events are automatically annotated as "News Spikes" on the price chart.
 
 ### 2. Alpha Scanner (Discovery)
+![Alpha Scanner](screenshots/alpha_scanner.png)
 An autonomous discovery engine that works in the background to surface high-probability edges.
-*   **Arbitrage Detection**: Identifies YES/NO sum deviations from fair value.
-*   **Logical Inconsistencies**: Scans correlated market clusters (e.g., US Elections, FOMC) for pricing errors.
-*   **AI Alpha**: Uses Llama 3.3 to estimate fair probabilities for high-volume markets.
-*   **Real-Time Notifications**: Instant, color-coded terminal alerts for newly detected opportunities.
-*   **One-Click Execution**: Integrated **QUICK BUY ⚡** buttons to instantly open the trade modal with the suggested side.
 
 ### 3. Trading Terminal (Execution)
+![Trading Terminal](screenshots/terminal_main.png)
 The main workspace for manual analysis and trade management.
 *   **Professional Charting**: High-performance candlestick charts powered by Lightweight Charts.
 *   **Full Order Books**: Real-time L2 depth relay from the Polymarket CLOB.

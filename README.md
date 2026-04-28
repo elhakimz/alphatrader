@@ -13,9 +13,11 @@ A dedicated research engine that aggregates global signals and transforms them i
 An autonomous discovery engine that works in the background to surface high-probability edges.
 
 ### 3. Trading Terminal (Execution)
-![Trading Terminal](screenshots/terminal_main.png)
+![AlphaTrader Terminal](screenshots/terminal_chart.png)
 The main workspace for manual analysis and trade management.
 *   **Professional Charting**: High-performance candlestick charts powered by Lightweight Charts.
+*   **News Spike Correlation**: Visual indicators directly on the chart (red circle markers) linking enriched news events to specific price actions.
+*   **Real-Time AI Alerts**: Integrated notification system surfacing high-confidence model edges (e.g., `AI_EDGE` alerts) with fair-probability estimates.
 *   **Full Order Books**: Real-time L2 depth relay from the Polymarket CLOB.
 *   **Dual Mode**: Seamlessly toggle between **PAPER** (simulated) and **LIVE** (mainnet) trading.
 *   **Modular UI**: Context-aware layout that hides terminal clutter when performing deep research or scanner analysis.

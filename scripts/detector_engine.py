@@ -100,12 +100,175 @@ class DetectorDB:
                 )
             """)
 
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_trades_session ON trades(session_id)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_alerts_created ON alerts(created_at DESC)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_ineff_market ON inefficiencies(market_id)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_ai_market ON ai_estimates(market_id)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_news_ts ON news(ts DESC)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_news_market ON news(market_id)")
+            # ── Copy Trading Tables ───────────────────────────
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS tracked_wallets (
+                    session_id TEXT,
+                    wallet_address TEXT,
+                    alias TEXT,
+                    created_at TEXT,
+                    PRIMARY KEY (session_id, wallet_address)
+                )
+            """)
+
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS copy_configs (
+                    id TEXT PRIMARY KEY,
+                    session_id TEXT,
+                    source_wallet TEXT,
+                    enabled INTEGER DEFAULT 1,
+                    paper_mode INTEGER DEFAULT 1,
+                    allocation_mode TEXT, -- 'fixed' or 'proportional'
+                    fixed_amount_usdc REAL,
+                    proportional_bps INTEGER,
+                    max_trade_usdc REAL,
+                    daily_loss_limit_usdc REAL,
+                    market_filter_json TEXT,
+                    delay_seconds INTEGER DEFAULT 0,
+                    created_at TEXT,
+                    updated_at TEXT
+                )
+            """)
+
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS tracked_trades (
+                    id TEXT PRIMARY KEY,
+                    source_wallet TEXT,
+                    market_id TEXT,
+                    side TEXT,
+                    price REAL,
+                    size_usdc REAL,
+                    tx_hash TEXT,
+                    ts TEXT,
+                    raw_json TEXT
+                )
+            """)
+
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS copied_trades (
+                    id TEXT PRIMARY KEY,
+                    config_id TEXT,
+                    session_id TEXT,
+                    source_trade_id TEXT,
+                    paper_mode INTEGER,
+                    executed_side TEXT,
+                    executed_price REAL,
+                    executed_size_usdc REAL,
+                    status TEXT, -- 'PENDING', 'EXECUTED', 'FAILED'
+                    pnl REAL,
+                    created_at TEXT
+                )
+            """)
+
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS suggested_wallets (
+                    wallet_address TEXT PRIMARY KEY,
+                    alias TEXT,
+                    category TEXT,
+                    created_at TEXT
+                )
+            """)
+
+            # Seed initial suggested wallets if empty
+            curr = conn.execute("SELECT COUNT(*) FROM suggested_wallets")
+            if curr.fetchone()[0] == 0:
+                suggestions = [
+                    ("0x6e0c80c90ea6c15917308F820Eac91Ce2724B5b5", "Whale_Alpha", "General"),
+                    ("0x4c2966a198cd7ac982110d0219b037afa9997570", "Macro_King", "Macro"),
+                    ("0x7940989f6483669176311a2f96e2208087773779", "Early_Bird", "Hype")
+                ]
+                for addr, alias, cat in suggestions:
+                    conn.execute(
+                        "INSERT INTO suggested_wallets (wallet_address, alias, category, created_at) VALUES (?, ?, ?, ?)",
+                        (addr.lower(), alias, cat, datetime.utcnow().isoformat())
+                    )
+
+    def get_suggested_wallets(self):
+        with self._get_conn() as conn:
+            curr = conn.execute("SELECT * FROM suggested_wallets ORDER BY created_at DESC")
+            return [dict(row) for row in curr.fetchall()]
+
+    # ── Copy Trading Methods ───────────────────────────────
+    def follow_wallet(self, session_id: str, wallet: str, alias: str = ""):
+        with self._get_conn() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO tracked_wallets (session_id, wallet_address, alias, created_at) VALUES (?, ?, ?, ?)",
+                (session_id, wallet.lower(), alias, datetime.utcnow().isoformat())
+            )
+
+    def unfollow_wallet(self, session_id: str, wallet: str):
+        with self._get_conn() as conn:
+            conn.execute(
+                "DELETE FROM tracked_wallets WHERE session_id = ? AND wallet_address = ?",
+                (session_id, wallet.lower())
+            )
+
+    def get_followed_wallets(self, session_id: str):
+        with self._get_conn() as conn:
+            curr = conn.execute("SELECT * FROM tracked_wallets WHERE session_id = ?", (session_id,))
+            return [dict(row) for row in curr.fetchall()]
+
+    def save_copy_config(self, config: dict):
+        with self._get_conn() as conn:
+            conn.execute("""
+                INSERT OR REPLACE INTO copy_configs 
+                (id, session_id, source_wallet, enabled, paper_mode, allocation_mode, fixed_amount_usdc, 
+                 proportional_bps, max_trade_usdc, daily_loss_limit_usdc, market_filter_json, delay_seconds, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                config['id'], config['session_id'], config['source_wallet'].lower(), config.get('enabled', 1),
+                config.get('paper_mode', 1), config['allocation_mode'], config.get('fixed_amount_usdc'),
+                config.get('proportional_bps'), config.get('max_trade_usdc'), config.get('daily_loss_limit_usdc'),
+                json.dumps(config.get('market_filter', [])), config.get('delay_seconds', 0),
+                config.get('created_at', datetime.utcnow().isoformat()), datetime.utcnow().isoformat()
+            ))
+
+    def get_copy_configs(self, session_id: str):
+        with self._get_conn() as conn:
+            curr = conn.execute("SELECT * FROM copy_configs WHERE session_id = ?", (session_id,))
+            return [dict(row) for row in curr.fetchall()]
+
+    def get_unresolved_copy_trades(self):
+        with self._get_conn() as conn:
+            curr = conn.execute(
+                """
+                SELECT c.*, t.market_id 
+                FROM copied_trades c
+                JOIN tracked_trades t ON c.source_trade_id = t.id
+                WHERE c.status = 'EXECUTED' AND c.pnl = 0.0
+                """
+            )
+            return [dict(row) for row in curr.fetchall()]
+
+    def update_copy_trade_pnl(self, trade_id: str, pnl: float, status: str = "RESOLVED"):
+        with self._get_conn() as conn:
+            conn.execute(
+                "UPDATE copied_trades SET pnl = ?, status = ? WHERE id = ?",
+                (pnl, status, trade_id)
+            )
+
+    def insert_tracked_trade(self, trade: dict):
+        with self._get_conn() as conn:
+            conn.execute("""
+                INSERT OR IGNORE INTO tracked_trades (id, source_wallet, market_id, side, price, size_usdc, tx_hash, ts, raw_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                trade['id'], trade['source_wallet'].lower(), trade['market_id'], trade['side'],
+                trade['price'], trade['size_usdc'], trade.get('tx_hash'), trade['ts'], json.dumps(trade.get('raw_json', {}))
+            ))
+
+    def get_recent_tracked_trades(self, session_id: str, limit=50):
+        with self._get_conn() as conn:
+            # Join with tracked_wallets to get the alias for this specific session
+            curr = conn.execute("""
+                SELECT t.*, w.alias 
+                FROM tracked_trades t
+                JOIN tracked_wallets w ON t.source_wallet = w.wallet_address
+                WHERE w.session_id = ?
+                ORDER BY t.ts DESC 
+                LIMIT ?
+            """, (session_id, limit))
+            return [dict(row) for row in curr.fetchall()]
 
     def insert_news_item(self, item: dict):
         with self._get_conn() as conn:
@@ -203,6 +366,23 @@ class DetectorDB:
         with self._get_conn() as conn:
             rows = conn.execute("SELECT * FROM alerts ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
             return [dict(r) for r in rows]
+
+    def prune_data(self, days=7):
+        """Prune historical data older than N days to manage DB size."""
+        with self._get_conn() as conn:
+            conn.execute(
+                "DELETE FROM alerts WHERE created_at < datetime('now', ?)",
+                (f"-{days} days",)
+            )
+            conn.execute(
+                "DELETE FROM inefficiencies WHERE created_at < datetime('now', ?)",
+                (f"-{days} days",)
+            )
+            conn.execute(
+                "DELETE FROM ai_estimates WHERE created_at < datetime('now', ?)",
+                (f"-{days} days",)
+            )
+            conn.commit()
 
 class ArbScanner:
     def __init__(self, threshold=None):
@@ -314,9 +494,10 @@ class GroqEstimator:
             return None
         prompt = f"Estimate fair probability for: {market['question']}. Current: {market['outcome_prices'][0]}. Return JSON: fair_probability, confidence, reasoning."
         try:
+            model = os.getenv("GROQ_ANALYSIS_MODEL", "llama-3.3-70b-versatile")
             response = await asyncio.to_thread(
                 self.client.chat.completions.create,
-                model="llama-3.3-70b-versatile",
+                model=model,
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"}
             )
@@ -334,6 +515,47 @@ class GroqEstimator:
                 "details": {"fair_prob": fair_prob, "market_price": market_price, "confidence": data['confidence'], "reasoning": data['reasoning']}
             }
         except Exception:
+            return None
+
+    async def deep_analyze(self, market: dict, recent_news: List[dict] = []) -> Optional[dict]:
+        """Generate a structured quantitative intelligence report for a market."""
+        if not self.client:
+            return None
+            
+        news_context = "\n".join([f"- {n['headline']} (PIS: {n['pis']})" for n in recent_news[:5]])
+        prompt = f"""
+        ACT AS: Professional Prediction Market Quantitative Analyst.
+        MARKET: {market['question']}
+        CURRENT PRICE: {market['outcome_prices'][0]} (YES)
+        RECENT NEWS:
+        {news_context}
+
+        TASK: Perform deep analysis and return a structured Intelligence Report.
+        
+        REQUIRED JSON FORMAT:
+        {{
+            "fair_value": 0.XX,
+            "confidence": 0.XX,
+            "rationale": "1-2 sentence technical summary",
+            "signals": {{
+                "momentum": 0.XX, 
+                "news_sentiment": 0.XX,
+                "logical_consistency": 0.XX
+            }}
+        }}
+        
+        Values (0.0 to 1.0). For signals, 0.5 is neutral.
+        """
+        try:
+            response = await asyncio.to_thread(
+                self.client.chat.completions.create,
+                model="llama-3.1-8b-instant",
+                messages=[{"role": "user", "content": prompt}],
+                response_format={"type": "json_object"}
+            )
+            return json.loads(response.choices[0].message.content)
+        except Exception as e:
+            print(f"[Groq] Deep analysis error: {e}")
             return None
 
 class AlertEngine:

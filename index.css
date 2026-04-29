@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
 :root {
   --bg-main: #0a0c0f;
   --bg-card: #111827;
@@ -9,15 +11,33 @@
   --accent: #60a5fa;
   --success: #10b981;
   --danger: #ef4444;
+  
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
 }
 
 body {
   margin: 0;
   padding: 0;
-  font-family: 'IBM Plex Mono', 'Courier New', monospace;
+  font-family: var(--font-mono);
   background: var(--bg-main);
   color: var(--text-main);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* UI Elements using Sans-serif for navigation/actions */
+.btn-primary, .btn-ghost, .tab, .badge, .inp, .toast, .modal, .sidebar-item, .resizer-handle {
+  font-family: var(--font-sans) !important;
+  font-feature-settings: "tnum"; /* Tabular numbers for any digits in buttons */
+  font-variant-numeric: tabular-nums;
+}
+
+/* Data-heavy elements using high-legibility fixed-width Mono */
+.mkt-row, .log-container, .order-book, .portfolio-view, .intelligence-panel, .price-display {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }

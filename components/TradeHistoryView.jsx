@@ -26,9 +26,21 @@ export default function TradeHistoryView({ history, loading }) {
         ) : (
           history.map((t, i) => {
             const isPaper = t.transactionHash?.startsWith("PAPER_");
+            
+            // Robust date parsing
+            let date;
+            if (typeof t.timestamp === 'number') {
+              // If it's a small number, assume seconds, otherwise milliseconds
+              date = new Date(t.timestamp < 10000000000 ? t.timestamp * 1000 : t.timestamp);
+            } else {
+              date = new Date(t.timestamp);
+            }
+            
+            const timeStr = isNaN(date.getTime()) ? "??:??" : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
             return (
               <div key={t.transactionHash || i} style={{ display: "grid", gridTemplateColumns: "70px 50px 1fr 40px 50px 50px 30px", gap: 8, padding: "10px 12px", borderBottom: "1px solid #0d1117", fontSize: 11, alignItems: "center" }} className="mkt-row">
-                <div style={{ color: "#64748b" }}>{new Date(t.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                <div style={{ color: "#64748b" }}>{timeStr}</div>
                 <div style={{ color: t.side === "BUY" ? "#10b981" : "#ef4444", fontWeight: 600 }}>{t.side}</div>
                 <div style={{ color: "#e2e8f0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={t.title}>
                   {t.title}

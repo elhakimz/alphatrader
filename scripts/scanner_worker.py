@@ -86,6 +86,13 @@ async def run_worker():
             normalized_markets = []
             for m in markets:
                 nm = m.copy()
+                
+                # CRITICAL: Use conditionId as the primary ID to match main app
+                cid = m.get("conditionId") or m.get("condition_id")
+                if not cid:
+                    continue
+                nm['id'] = cid
+                
                 # Ensure outcome_prices is always a list of floats
                 raw_prices = m.get('outcomePrices') or m.get('outcome_prices') or ["0.5", "0.5"]
                 nm['outcome_prices'] = [safe_float(p) for p in raw_prices]

@@ -21,6 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from .news_engine import NewsEngine
+from .copy_trading_engine import CopyTradingEngine
 from py_clob_client_v2.client import ClobClient
 
 from py_clob_client_v2.clob_types import ApiCreds, OrderArgs
@@ -99,7 +100,9 @@ class TraderState:
         self.cross_scanner = CrossScanner()
         self.groq_estimator = GroqEstimator(os.getenv("GROQ_API_KEY"))
         self.news_engine = NewsEngine(self.db, os.getenv("GROQ_API_KEY"))
+        self.copy_engine = CopyTradingEngine(self.db)
         self.alert_engine = AlertEngine(self.db)
+
 
     def get_all_tracked_tokens(self) -> List[str]:
         """Get tokens from active markets and all current portfolio positions."""
@@ -491,6 +494,7 @@ async def broadcast_log(level: str, msg: str):
 @app.on_event("startup")
 async def on_startup():
     await broadcast_log("INFO", "Initializing server...")
+    state.copy_engine.on_action = broadcast
     if os.path.exists(DB_FILE):
         try:
             with open(DB_FILE, "r") as f:
@@ -500,6 +504,7 @@ async def on_startup():
             pass
 
     async def initial_load():
+        state.db.prune_data(days=7)  # Manage local DB size
         state.active_markets = await fetch_markets()
         await broadcast_log("INFO", f"Markets loaded: {len(state.active_markets)}")
         
@@ -528,6 +533,7 @@ async def on_startup():
     asyncio.create_task(state_pruning_loop())
     # asyncio.create_task(scanner_loop()) # Now handled by standalone worker
     asyncio.create_task(news_loop())
+    asyncio.create_task(state.copy_engine.start())
 
 
 async def news_loop():
@@ -814,6 +820,79 @@ async def get_news(market_id: str = None, limit: int = 50):
     return state.db.get_recent_news(market_id=market_id, limit=limit)
 
 
+# ── Copy Trading Endpoints ─────────────────────────────────
+@app.post("/copy/follow")
+async def follow_wallet(session_id: str, wallet: str, alias: str = ""):
+    state.db.follow_wallet(session_id, wallet, alias)
+    # Trigger immediate sync
+    await state.copy_engine.sync_wallet(wallet)
+    return {"status": "ok"}
+
+
+@app.post("/copy/unfollow")
+async def unfollow_wallet(session_id: str, wallet: str):
+    state.db.unfollow_wallet(session_id, wallet)
+    return {"status": "ok"}
+
+
+@app.get("/copy/suggested")
+async def get_suggested_wallets():
+    return state.db.get_suggested_wallets()
+
+@app.get("/copy/wallets")
+async def get_followed_wallets(session_id: str):
+    return state.db.get_followed_wallets(session_id)
+
+
+@app.get("/copy/trades")
+async def get_copy_feed(session_id: str, limit: int = 50):
+    # Get trades for the wallets followed by this session
+    trades = state.db.get_recent_tracked_trades(session_id, limit=limit)
+    
+    # 3. Parse raw_json strings for the frontend
+    for t in trades:
+        if isinstance(t.get('raw_json'), str):
+            try:
+                parsed = json.loads(t['raw_json'])
+                if isinstance(parsed, dict) and 'raw_json' in parsed:
+                    t['raw_json'] = parsed['raw_json']
+                else:
+                    t['raw_json'] = parsed
+            except Exception:
+                pass
+                
+    return trades
+
+
+@app.post("/copy/config/save")
+async def save_copy_config(config: dict):
+    state.db.save_copy_config(config)
+    return {"status": "ok"}
+
+
+@app.get("/copy/configs")
+async def get_copy_configs(session_id: str):
+    return state.db.get_copy_configs(session_id)
+
+
+@app.get("/copy/my_copies")
+async def get_my_copies(session_id: str, limit: int = 50):
+    with state.db._get_conn() as conn:
+        # Join with tracked_trades to get the market_id
+        curr = conn.execute(
+            """
+            SELECT c.*, t.market_id 
+            FROM copied_trades c
+            JOIN tracked_trades t ON c.source_trade_id = t.id
+            WHERE c.session_id = ? 
+            ORDER BY c.created_at DESC 
+            LIMIT ?
+            """,
+            (session_id, limit)
+        )
+        return [dict(row) for row in curr.fetchall()]
+
+
 @app.post("/notify/new_alert")
 async def notify_new_alert(alert: dict):
     """Internal endpoint for worker to notify about new alerts."""
@@ -1065,8 +1144,78 @@ async def handle_client_message(session_id, ws, msg):
             except Exception as e:
                 await broadcast_log("ERROR", f"RESEARCH: Failed for '{query}': {str(e)[:100]}")
 
-    elif mtype == "run_manual_scan":
+    elif mtype == "request_intelligence":
+        m_id = msg.get("market_id")
+        if m_id:
+            try:
+                # Use case-insensitive search to prevent hanging if casing differs
+                market = next((m for m in state.active_markets if m["id"].lower() == m_id.lower()), None)
+                if not market:
+                    await broadcast_log("ERROR", f"BRAIN: Market {m_id[:8]} not found in active list.")
+                    await ws.send_text(json.dumps({
+                        "type": "intelligence_report",
+                        "market_id": m_id,
+                        "report": None,
+                        "error": "Market not found"
+                    }))
+                    return
+                    
+                await broadcast_log("INFO", f"BRAIN: Deep analyzing {market['question'][:40]}...")
+                
+                # Fetch relevant news from DB for context
+                related_news = state.db.get_recent_news(market_id=m_id, limit=5)
+                
+                report = await asyncio.wait_for(
+                    state.groq_estimator.deep_analyze(market, related_news),
+                    timeout=25.0
+                )
+                
+                if report:
+                    await ws.send_text(json.dumps({
+                        "type": "intelligence_report",
+                        "market_id": m_id,
+                        "report": report
+                    }))
+                    await broadcast_log("INFO", f"BRAIN: Intelligence report ready (Fair Value: {round(report['fair_value']*100)}%)")
+                else:
+                    raise Exception("Analysis returned empty report")
+            except Exception as e:
+                await broadcast_log("ERROR", f"BRAIN: Failed for {m_id[:8]}: {str(e)[:50]}")
+                # Send error response to stop frontend loading state
+                await ws.send_text(json.dumps({
+                    "type": "intelligence_report",
+                    "market_id": m_id,
+                    "report": None,
+                    "error": str(e)
+                }))
 
+    elif mtype == "fetch_market":
+        m_id = msg.get("market_id")
+        if m_id:
+            existing = next((m for m in state.active_markets if m["id"].lower() == m_id.lower()), None)
+            if not existing:
+                # Fetch from Gamma
+                async def fetch_missing():
+                    async with httpx.AsyncClient(timeout=10) as client:
+                        try:
+                            # Try active first
+                            resp = await client.get(f"{GAMMA_API}/markets?condition_ids={m_id}&closed=false")
+                            data = resp.json()
+                            if not data:
+                                # Try closed
+                                resp = await client.get(f"{GAMMA_API}/markets?condition_ids={m_id}&closed=true")
+                                data = resp.json()
+                                
+                            if data and isinstance(data, list) and len(data) > 0:
+                                enriched = await enrich_market_data(client, data)
+                                if enriched:
+                                    state.active_markets.append(enriched[0])
+                                    await broadcast({"type": "markets_refresh", "markets": state.active_markets})
+                        except Exception as e:
+                            await broadcast_log("ERROR", f"Failed to fetch market {m_id[:8]}: {e}")
+                asyncio.create_task(fetch_missing())
+
+    elif mtype == "run_manual_scan":
         await perform_scan()
         await ws.send_text(json.dumps({"type": "manual_scan_complete"}))
 

@@ -16,7 +16,9 @@ export default function Header({
   isLogsVisible,
   setIsLogsVisible,
   showChart,
-  setShowChart
+  setShowChart,
+  showPortfolio,
+  setShowPortfolio
 }) {
   return (
     <div style={{ background: "#060809", borderBottom: "1px solid #1f2937", padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -45,6 +47,21 @@ export default function Header({
             }}
           >
             CHART
+          </button>
+
+          <button 
+            className="btn-ghost" 
+            onClick={() => setShowPortfolio(!showPortfolio)}
+            style={{ 
+              fontSize: 10, 
+              padding: "4px 10px", 
+              background: showPortfolio ? "rgba(96, 165, 250, 0.1)" : "transparent", 
+              color: showPortfolio ? "#60a5fa" : "#4b5563",
+              border: "1px solid " + (showPortfolio ? "rgba(96, 165, 250, 0.3)" : "#1f2937"),
+              borderRadius: 6
+            }}
+          >
+            POSITIONS
           </button>
 
           <button 

@@ -139,7 +139,12 @@ const MarketList = memo(({
             >
               Vol 24h <SortIcon k="volume" />
             </th>
-            <th style={{ padding: "6px 8px", textAlign: "right", width: 140, fontWeight: 500 }}>Start - End Date</th>
+            <th 
+              style={{ padding: "6px 8px", textAlign: "right", width: 140, cursor: "pointer" }}
+              onClick={() => handleSort("start_date")}
+            >
+              Start - End Date <SortIcon k="start_date" />
+            </th>
             <th style={{ padding: "6px 12px", width: 120 }}></th>
           </tr>
         </thead>

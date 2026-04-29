@@ -14,6 +14,7 @@ import Sidebar from "./components/Sidebar";
 import ScannerDashboard from "./components/ScannerDashboard";
 import LogViewer from "./components/LogViewer";
 import NewsFeed from "./components/NewsFeed";
+import CopyTradingHub from "./components/copy_trading/CopyTradingHub";
 
 // ── Global Config ──────────────────────────────────────────
 const SESSION_ID = (() => {
@@ -58,15 +59,18 @@ export default function PolymarketTrader() {
   const [isChartLoading, setIsChartLoading] = useState(false);
   const [timescale, setTimescale] = useState("1s");
   const [chartHeight, setChartHeight] = useState(300);
-  const [sortConfig, setSortConfig] = useState({ key: "volume", direction: "desc" });
+  const [sortConfig, setSortConfig] = useState({ key: "start_date", direction: "desc" });
   const [viewMode, setViewMode] = useState("table");
   const [listType, setListType] = useState("active");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLogsVisible, setIsLogsVisible] = useState(false);
   const [showChart, setShowChart] = useState(true);
+  const [showPortfolio, setShowPortfolio] = useState(true);
   const [alerts, setAlerts] = useState([]);
   const [news, setNews] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [intelligenceReport, setIntelligenceReport] = useState(null);
+  const [isIntelligenceLoading, setIsIntelligenceLoading] = useState(false);
   const [scannerStats, setScannerStats] = useState({ markets_count: 0, scans_today: 0, alerts_today: 0, last_scan: null });
   
   // Buffers for high-frequency data
@@ -93,6 +97,13 @@ export default function PolymarketTrader() {
   const lastHistoryKeyRef = useRef("");
   const lastFetchRef = useRef("");
   const lastSearchedIdRef = useRef("");
+  const lastBrainMarketIdRef = useRef("");
+  const selectedMarketIdRef = useRef(null);
+
+  // Sync ref with state
+  useEffect(() => {
+    selectedMarketIdRef.current = selectedMarketId;
+  }, [selectedMarketId]);
 
   // 2. Helpers
   const getTokenId = (market, outcomeIdx) => {
@@ -161,6 +172,31 @@ export default function PolymarketTrader() {
     setTimeout(() => setToast(null), 3000);
   }, []);
 
+  const playNotificationSound = useCallback(() => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.1);
+    } catch (e) { console.error("Audio error", e); }
+  }, []);
+
+  const onMarketClick = useCallback((marketId) => {
+    if (!marketId) return;
+    // Handle comma-separated lists (take first ID)
+    const singleId = marketId.toString().split(',')[0].trim();
+    setSelectedMarketId(singleId);
+    setActiveTab("detail");
+  }, []);
+
   // 4. Data Fetching
   const fetchTradeHistory = useCallback(async () => {
     if (tradeMode === "PAPER") {
@@ -184,9 +220,12 @@ export default function PolymarketTrader() {
     if (!marketId) return;
     setIsChartLoading(true);
     try {
-      const market = markets.find(m => m.id === marketId);
+      const market = markets.find(m => m.id?.toLowerCase() === marketId.toLowerCase());
       const tid = getTokenId(market, 0);
-      if (!tid) return;
+      if (!tid) {
+        lastFetchRef.current = ""; // Reset so we retry when market loads
+        return;
+      }
       const map = { "1s": ["1d", 0], "1m": ["1w", 1], "15m": ["1d", 1], "1h": ["1w", 5], "6h": ["max", 60], "1d": ["max", 60], "1w": ["max", 1440] };
       const [apiInt, apiFid] = map[ts] || ["1w", 60];
       const resp = await fetch(`http://${API_HOST}/history?token_id=${tid}&interval=${apiInt}&fidelity=${apiFid}`);
@@ -272,7 +311,49 @@ export default function PolymarketTrader() {
         } else if (msg.type === "new_alpha_alert") {
           const id = Math.random().toString(36).slice(2, 9);
           setNotifications(prev => [{ id, ...msg.alert }, ...prev].slice(0, 5));
-          setTimeout(() => setNotifications(prev => prev.filter(n => n.id !== id)), 8000);
+          playNotificationSound();
+          // Hide after 3 minutes (180,000 ms)
+          setTimeout(() => setNotifications(prev => prev.filter(n => n.id !== id)), 180000);
+        } else if (msg.type === "copy_executed" && msg.session_id === SESSION_ID) {
+          const id = Math.random().toString(36).slice(2, 9);
+          const alert = {
+            id,
+            alert_type: "MIRROR EXECUTION",
+            severity: "HIGH",
+            market_id: msg.market_id,
+            market_question: "Automated Copy Trade",
+            message: `Mirroring ${msg.side} ${msg.size} USDC at ${Math.round(msg.price * 100)}¢`
+          };
+          setNotifications(prev => [alert, ...prev].slice(0, 5));
+          addLog("sys", `COPY: [${msg.wallet_address.slice(0, 8)}] Mirroring ${msg.side} on ${msg.market_id.slice(0, 8)}`);
+          playNotificationSound();
+        } else if (msg.type === "copy_settled" && msg.session_id === SESSION_ID) {
+          const id = Math.random().toString(36).slice(2, 9);
+          const alert = {
+            id,
+            alert_type: "COPY RESOLVED",
+            severity: "MEDIUM",
+            market_id: msg.market_id,
+            market_question: "Automated Copy Settle",
+            message: `Trade settled with PnL: ${msg.pnl >= 0 ? "+" : ""}${msg.pnl.toFixed(2)} USDC`
+          };
+          setNotifications(prev => [alert, ...prev].slice(0, 5));
+          addLog("sys", `COPY: Settled trade on ${msg.market_id.slice(0, 8)} | PnL: $${msg.pnl.toFixed(2)}`);
+          playNotificationSound();
+          // Dispatch a custom event to tell CopyTradingHub to refresh
+          window.dispatchEvent(new CustomEvent("copy_trading_refresh"));
+        } else if (msg.type === "intelligence_report") {
+          console.log(`[BRAIN] Report received for ${msg.market_id}`);
+          const currentId = selectedMarketIdRef.current;
+          if (currentId && msg.market_id.toLowerCase() === currentId.toLowerCase()) {
+            if (msg.error) {
+              showToast(`Brain Error: ${msg.error}`, false);
+              setIsIntelligenceLoading(false);
+            } else {
+              setIntelligenceReport(msg.report);
+              setIsIntelligenceLoading(false);
+            }
+          }
         } else if (msg.type === "server_log") {
           addLog(msg.level, msg.message, msg.ts);
         }
@@ -280,7 +361,7 @@ export default function PolymarketTrader() {
     };
     ws.onclose = () => setConnState(CONN_STATES.CLOSED);
     return () => ws.close();
-  }, [addLog, showToast, send]);
+  }, [addLog, showToast, send, playNotificationSound]);
 
   useEffect(() => {
     if (tradeMode === "LIVE" && connState === CONN_STATES.OPEN && lastSyncModeRef.current !== "LIVE") {
@@ -305,10 +386,20 @@ export default function PolymarketTrader() {
     }
   }, [selectedMarketId, timescale, fetchHistory]);
 
+  // On-demand Fetch Missing Market
+  useEffect(() => {
+    if (selectedMarketId) {
+      const market = markets.find(m => m.id?.toLowerCase() === selectedMarketId.toLowerCase());
+      if (!market) {
+        send({ type: "fetch_market", market_id: selectedMarketId });
+      }
+    }
+  }, [selectedMarketId, markets, send]);
+
   // On-demand News Search
   useEffect(() => {
     if (activeTab === "news" && selectedMarketId && lastSearchedIdRef.current !== selectedMarketId) {
-      const market = markets.find(m => m.id === selectedMarketId);
+      const market = markets.find(m => m.id?.toLowerCase() === selectedMarketId?.toLowerCase());
       if (market) {
         setTimeout(() => addLog("sys", `RESEARCH: Requesting intelligence for '${market.question.slice(0, 40)}...'`), 0);
         send({ type: "search_news", query: market.question, market_id: market.id });
@@ -319,9 +410,28 @@ export default function PolymarketTrader() {
     }
   }, [activeTab, selectedMarketId, markets, send, addLog]);
 
+  const refreshIntelligence = useCallback(() => {
+    if (selectedMarketId) {
+      send({ type: "request_intelligence", market_id: selectedMarketId });
+      setIsIntelligenceLoading(true);
+      setIntelligenceReport(null);
+      lastBrainMarketIdRef.current = selectedMarketId;
+    }
+  }, [selectedMarketId, send]);
+
+  // On-demand Edge Brain Intelligence
+  useEffect(() => {
+    if (activeTab === "detail" && selectedMarketId && lastBrainMarketIdRef.current !== selectedMarketId) {
+      refreshIntelligence();
+    } else if (!selectedMarketId) {
+      lastBrainMarketIdRef.current = "";
+      setTimeout(() => setIntelligenceReport(null), 0);
+    }
+  }, [activeTab, selectedMarketId, refreshIntelligence]);
+
   useEffect(() => {
     if (!selectedMarketId || isChartLoading || chartData.length === 0) return;
-    const tid = getTokenId(markets.find(m => m.id === selectedMarketId), 0);
+    const tid = getTokenId(markets.find(m => m.id?.toLowerCase() === selectedMarketId?.toLowerCase()), 0);
     const newPrice = prices[tid]?.price;
     if (newPrice == null) return;
     const secMap = { "1s": 1, "1m": 60, "15m": 900, "1h": 3600, "6h": 21600, "1d": 86400, "1w": 604800 };
@@ -354,14 +464,6 @@ export default function PolymarketTrader() {
     if (isNaN(shares) || shares <= 0) return showToast("Enter valid shares", false);
     send({ type: "trade", token_id: getTokenId(tradeModal, selectedOutcome), side: tradeSide, shares, price: tradePrice || getPrice(tradeModal, selectedOutcome), question: tradeModal.question, outcome: (tradeModal.outcomes || ["YES", "NO"])[selectedOutcome], mode: tradeMode });
   };
-
-  const onMarketClick = useCallback((marketId) => {
-    if (!marketId) return;
-    // Handle comma-separated lists (take first ID)
-    const singleId = marketId.toString().split(',')[0].trim();
-    setSelectedMarketId(singleId);
-    setActiveTab("detail");
-  }, []);
 
   const terminalTabs = ["markets", "detail", "depth", "history"];
   const isTerminalActive = terminalTabs.includes(activeTab);
@@ -397,6 +499,7 @@ export default function PolymarketTrader() {
         send={send} CONN_STATES={CONN_STATES} 
         isLogsVisible={isLogsVisible} setIsLogsVisible={setIsLogsVisible}
         showChart={showChart} setShowChart={setShowChart}
+        showPortfolio={showPortfolio} setShowPortfolio={setShowPortfolio}
       />
       
       <div className="main-layout">
@@ -415,11 +518,14 @@ export default function PolymarketTrader() {
                   data={chartData} loading={isChartLoading} timescale={timescale} 
                   onTimescaleChange={setTimescale} chartHeight={chartHeight} 
                   markers={chartMarkers}
-                  tokenName={
-                    (markets.find(m => m.id === selectedMarketId)?.start_date && new Date(markets.find(m => m.id === selectedMarketId).start_date).toISOString().split('T')[0] === new Date(window.SYSTEM_DATE || "2026-04-26").toISOString().split('T')[0] ? "[NEW] " : "") + 
-                    (markets.find(m => m.id === selectedMarketId)?.end_date && new Date(markets.find(m => m.id === selectedMarketId).end_date) < new Date(window.SYSTEM_DATE || "2026-04-26") ? "[EXPIRED] " : "") + 
-                    markets.find(m => m.id === selectedMarketId)?.question?.slice(0, 60) + "..."
-                  } 
+                  tokenName={(() => {
+                    const m = markets.find(m => m.id?.toLowerCase() === selectedMarketId?.toLowerCase());
+                    if (!m) return "Loading Market Data...";
+                    let prefix = "";
+                    if (m.start_date && new Date(m.start_date).toISOString().split('T')[0] === new Date(window.SYSTEM_DATE || "2026-04-26").toISOString().split('T')[0]) prefix += "[NEW] ";
+                    if (m.end_date && new Date(m.end_date) < new Date(window.SYSTEM_DATE || "2026-04-26")) prefix += "[EXPIRED] ";
+                    return prefix + (m.question?.slice(0, 60) || "Unknown Market") + "...";
+                  })()} 
                 />
               </div>
               <div className="resizer" onMouseDown={(e) => {
@@ -511,6 +617,9 @@ export default function PolymarketTrader() {
                 openTrade={openTrade}
               />
             )}
+            {activeTab === "copy" && (
+              <CopyTradingHub session_id={SESSION_ID} onMarketClick={onMarketClick} markets={markets} />
+            )}
             {activeTab === "news" && (
               <NewsFeed 
                 news={(() => {
@@ -520,23 +629,43 @@ export default function PolymarketTrader() {
                   );
                 })()} 
                 onMarketClick={onMarketClick} 
-                title={selectedMarketId ? markets.find(m => m.id === selectedMarketId)?.question : null}
+                title={selectedMarketId ? markets.find(m => m.id?.toLowerCase() === selectedMarketId?.toLowerCase())?.question : null}
               />
             )}
             {activeTab === "depth" && (
-              selectedMarketId ? <OrderBookView book={orderBooks[getTokenId(markets.find(m => m.id === selectedMarketId), 0)]} onPriceClick={(p) => openTrade(markets.find(m => m.id === selectedMarketId), "buy", 0, p)} /> : <div className="empty-state">Select a market.</div>
+              selectedMarketId ? <OrderBookView book={orderBooks[getTokenId(markets.find(m => m.id?.toLowerCase() === selectedMarketId?.toLowerCase()), 0)]} onPriceClick={(p) => openTrade(markets.find(m => m.id?.toLowerCase() === selectedMarketId?.toLowerCase()), "buy", 0, p)} /> : <div className="empty-state">Select a market.</div>
             )}
             {activeTab === "history" && <TradeHistoryView history={tradeHistory} loading={isHistoryLoading} />}
             {activeTab === "detail" && (
-              <MarketDetailView market={markets.find(m => m.id === selectedMarketId)} />
+              <MarketDetailView 
+                market={markets.find(m => m.id?.toLowerCase() === selectedMarketId?.toLowerCase())} 
+                isMarketLoading={selectedMarketId && !markets.find(m => m.id?.toLowerCase() === selectedMarketId?.toLowerCase())}
+                intelligenceReport={intelligenceReport}
+                isIntelligenceLoading={isIntelligenceLoading}
+                openTrade={openTrade}
+                getPrice={getPrice}
+                onRefresh={refreshIntelligence}
+              />
             )}
           </div>
         </div>
 
-        <PortfolioView 
-          portfolio={portfolio} prices={prices} markets={markets} setTradeModal={setTradeModal} 
-          setTradeSide={setTradeSide} setSelectedOutcome={setSelectedOutcome} setTradeShares={setTradeShares} positionPnl={stats.pnl}
-        />
+        <div style={{ 
+          width: showPortfolio ? 400 : 0, 
+          height: "100%",
+          overflow: "hidden", 
+          transition: "width 0.2s ease",
+          borderLeft: showPortfolio ? "1px solid #1f2937" : "none",
+          display: "flex",
+          flexDirection: "column"
+        }}>
+          <div style={{ width: 400, minWidth: 400, height: "100%", display: "flex", flexDirection: "column" }}>
+            <PortfolioView 
+              portfolio={portfolio} prices={prices} markets={markets} setTradeModal={setTradeModal} 
+              setTradeSide={setTradeSide} setSelectedOutcome={setSelectedOutcome} setTradeShares={setTradeShares} positionPnl={stats.pnl}
+            />
+          </div>
+        </div>
       </div>
 
       {/* Global Bottom Log Panel */}
@@ -582,6 +711,7 @@ export default function PolymarketTrader() {
       <NotificationCenter 
         notifications={notifications} 
         onDismiss={(id) => setNotifications(prev => prev.filter(n => n.id !== id))} 
+        onMarketClick={onMarketClick}
       />
 
       {toast && <div className="toast" style={{ background: toast.ok ? "#064e3b" : "#450a0a" }}>{toast.ok ? "✓" : "✗"} {toast.msg}</div>}
@@ -589,7 +719,7 @@ export default function PolymarketTrader() {
   );
 }
 
-function NotificationCenter({ notifications, onDismiss }) {
+function NotificationCenter({ notifications, onDismiss, onMarketClick }) {
   if (!notifications || notifications.length === 0) return null;
   return (
     <div style={{
@@ -604,19 +734,23 @@ function NotificationCenter({ notifications, onDismiss }) {
       pointerEvents: "none"
     }}>
       {notifications.map(n => (
-        <div key={n.id} style={{
-          background: "#0d1117",
-          border: "1px solid #1f2937",
-          borderLeft: `4px solid ${n.severity === 'HIGH' ? '#ef4444' : '#f59e0b'}`,
-          padding: "12px 16px",
-          borderRadius: 4,
-          boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.5)",
-          pointerEvents: "auto",
-          animation: "slideIn 0.3s ease-out",
-          position: "relative"
-        }}>
+        <div key={n.id} 
+          onClick={() => { onMarketClick && onMarketClick(n.market_id); onDismiss(n.id); }}
+          style={{
+            background: "#0d1117",
+            border: "1px solid #1f2937",
+            borderLeft: `4px solid ${n.severity === 'HIGH' ? '#ef4444' : '#f59e0b'}`,
+            padding: "12px 16px",
+            borderRadius: 4,
+            boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.5)",
+            pointerEvents: "auto",
+            animation: "slideIn 0.3s ease-out",
+            position: "relative",
+            cursor: "pointer"
+          }}
+        >
           <button 
-            onClick={() => onDismiss(n.id)}
+            onClick={(e) => { e.stopPropagation(); onDismiss(n.id); }}
             style={{
               position: "absolute",
               top: 8,

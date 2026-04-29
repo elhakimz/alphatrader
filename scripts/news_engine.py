@@ -5,6 +5,7 @@ import hashlib
 from datetime import datetime
 from typing import List, Optional
 from groq import Groq
+import os
 import json
 import urllib.parse
 
@@ -128,9 +129,10 @@ class NewsEngine:
         """
         try:
             # Use Llama 3 for fast, high-quality analysis
+            model = os.getenv("GROQ_ANALYSIS_MODEL", "llama-3.3-70b-versatile")
             response = await asyncio.to_thread(
                 self.client.chat.completions.create,
-                model="llama-3.3-70b-versatile",
+                model=model,
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"}
             )

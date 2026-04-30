@@ -64,20 +64,23 @@ const PortfolioView = memo(({ portfolio, prices, markets, setTradeModal, setTrad
         }}>
           POSITIONS {hasEligible && `[${eligiblePositions.length} READY]`}
         </span>
-        <button 
-          onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-          style={{
-            background: "transparent",
-            border: "none",
-            color: isSettingsOpen ? "#60a5fa" : "#4b5563",
-            fontSize: "12px",
-            cursor: "pointer",
-            padding: "2px 4px"
-          }}
-          title="Profit Alerts Settings"
-        >
-          {isSettingsOpen ? "[SETTING]" : "[⚙]"}
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 9, color: "#4b5563", fontWeight: 600 }}>[ &gt;{sellThreshold}% ]</span>
+          <button 
+            onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: isSettingsOpen ? "#60a5fa" : "#4b5563",
+              fontSize: "12px",
+              cursor: "pointer",
+              padding: "2px 4px"
+            }}
+            title="Profit Alerts Settings"
+          >
+            {isSettingsOpen ? "[SETTING]" : "[⚙]"}
+          </button>
+        </div>
       </div>
 
       {isSettingsOpen && (

@@ -1,7 +1,7 @@
 import { memo, useState, useEffect, useRef, useMemo } from "react";
 import { fmt$, fmtPct, fmtTs } from "../utils";
 
-const PortfolioView = memo(({ portfolio, prices, markets, setTradeModal, setTradeSide, setSelectedOutcome, setTradeShares, positionPnl, playNotificationSound, onMarketClick }) => {
+const PortfolioView = memo(({ portfolio, prices, markets, setTradeModal, setTradeSide, setSelectedOutcome, setTradeShares, positionPnl, playNotificationSound, onMarketClick, showToast }) => {
   const [isHistoryMinimized, setIsHistoryMinimized] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [sellThreshold, setSellThreshold] = useState(10);
@@ -138,7 +138,13 @@ const PortfolioView = memo(({ portfolio, prices, markets, setTradeModal, setTrad
                 key={tid} 
                 className="pos-row"
                 style={{ padding: "10px 14px", borderBottom: "1px solid #0d1117", opacity: isExpired ? 0.6 : 1 }}
-                onClick={() => market && onMarketClick(market.id)}
+                onClick={() => {
+                  if (market) {
+                    onMarketClick(market.id);
+                  } else {
+                    showToast("Market item not found", false);
+                  }
+                }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
                   <div>
@@ -203,24 +209,38 @@ const PortfolioView = memo(({ portfolio, prices, markets, setTradeModal, setTrad
           {(portfolio.history || []).length === 0 ? (
             <div style={{ color: "#374151", fontSize: 12, padding: "16px 14px" }}>No trades yet</div>
           ) : (
-            [...(portfolio.history || [])].reverse().map((t, i) => (
-              <div key={t.id || i} style={{ padding: "10px 14px", borderBottom: "1px solid #0d1117" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <span className="badge" style={{ background: t.side === "buy" ? "#1e3a5f" : "#451a03", color: t.side === "buy" ? "#93c5fd" : "#fdba74", fontWeight: 800 }}>{t.side.toUpperCase()}</span>
-                    <span className="badge" style={{ background: t.outcome === "YES" ? "#064e3b" : "#450a0a", color: t.outcome === "YES" ? "#6ee7b7" : "#fca5a5" }}>{t.outcome}</span>
+            [...(portfolio.history || [])].reverse().map((t, i) => {
+              const market = markets.find(m => m.id?.toLowerCase() === t.market_id?.toLowerCase());
+              return (
+                <div 
+                  key={t.id || i} 
+                  className="pos-row"
+                  style={{ padding: "10px 14px", borderBottom: "1px solid #0d1117" }}
+                  onClick={() => {
+                    if (market) {
+                      onMarketClick(market.id);
+                    } else {
+                      showToast("Market item not found", false);
+                    }
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <span className="badge" style={{ background: t.side === "buy" ? "#1e3a5f" : "#451a03", color: t.side === "buy" ? "#93c5fd" : "#fdba74", fontWeight: 800 }}>{t.side.toUpperCase()}</span>
+                      <span className="badge" style={{ background: t.outcome === "YES" ? "#064e3b" : "#450a0a", color: t.outcome === "YES" ? "#6ee7b7" : "#fca5a5" }}>{t.outcome}</span>
+                    </div>
+                    <span style={{ color: "#f1f5f9", fontWeight: 700, fontSize: 11 }}>{fmt$(t.cost)}</span>
                   </div>
-                  <span style={{ color: "#f1f5f9", fontWeight: 700, fontSize: 11 }}>{fmt$(t.cost)}</span>
+                  <div style={{ color: "#94a3b8", fontSize: 11, marginBottom: 6, lineHeight: 1.3 }}>
+                    {(t.market_question || t.question || "Unknown Market")}
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
+                    <div style={{ color: "#4b5563" }}>{t.shares.toFixed(2)} shares @ <span style={{ color: "#60a5fa" }}>{(t.price * 100).toFixed(1)}¢</span></div>
+                    <div style={{ color: "#374151" }}>{fmtTs(t.ts)}</div>
+                  </div>
                 </div>
-                <div style={{ color: "#94a3b8", fontSize: 11, marginBottom: 6, lineHeight: 1.3 }}>
-                  {(t.market_question || t.question || "Unknown Market")}
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
-                  <div style={{ color: "#4b5563" }}>{t.shares.toFixed(2)} shares @ <span style={{ color: "#60a5fa" }}>{(t.price * 100).toFixed(1)}¢</span></div>
-                  <div style={{ color: "#374151" }}>{fmtTs(t.ts)}</div>
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       )}

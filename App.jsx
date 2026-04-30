@@ -15,6 +15,7 @@ import ScannerDashboard from "./components/ScannerDashboard";
 import LogViewer from "./components/LogViewer";
 import NewsFeed from "./components/NewsFeed";
 import CopyTradingHub from "./components/copy_trading/CopyTradingHub";
+import PmbotHub from "./components/pmbot/PmbotHub";
 
 // ── Global Config ──────────────────────────────────────────
 const SESSION_ID = (() => {
@@ -337,6 +338,21 @@ export default function PolymarketTrader() {
           setNotifications(prev => [alert, ...prev].slice(0, 5));
           addLog("sys", `COPY: [${msg.wallet_address.slice(0, 8)}] Mirroring ${msg.side} on ${msg.market_id.slice(0, 8)}`);
           playNotificationSound();
+        } else if (msg.type === "server_log") {
+          addLog(msg.level.toLowerCase(), msg.message, msg.ts);
+        } else if (msg.type === "pmbot_state_update" || msg.type === "pmbot_trade_executed") {
+          window.dispatchEvent(new CustomEvent("pmbot_update", { detail: msg }));
+          if (msg.type === "pmbot_trade_executed") {
+             const id = Math.random().toString(36).slice(2, 9);
+             setNotifications(prev => [{
+               id,
+               alert_type: "AI BOT EXECUTION",
+               severity: "MEDIUM",
+               market_id: msg.market_id,
+               message: `PMBot executed ${msg.side} for $${msg.amount.toFixed(2)}`
+             }, ...prev].slice(0, 5));
+             playNotificationSound();
+          }
         } else if (msg.type === "copy_settled" && msg.session_id === SESSION_ID) {
           const id = Math.random().toString(36).slice(2, 9);
           const alert = {
@@ -364,8 +380,6 @@ export default function PolymarketTrader() {
               setIsIntelligenceLoading(false);
             }
           }
-        } else if (msg.type === "server_log") {
-          addLog(msg.level, msg.message, msg.ts);
         }
       } catch (ex) { console.error("WS Error", ex); }
     };
@@ -632,7 +646,9 @@ export default function PolymarketTrader() {
             {activeTab === "copy" && (
               <CopyTradingHub session_id={SESSION_ID} onMarketClick={onMarketClick} markets={markets} />
             )}
-            {activeTab === "news" && (
+            {activeTab === "pmbot" && (
+              <PmbotHub onMarketClick={onMarketClick} markets={markets} />
+            )}            {activeTab === "news" && (
               <NewsFeed 
                 news={(() => {
                   if (!selectedMarketId) return news;

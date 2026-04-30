@@ -34,6 +34,7 @@ from .detector_engine import (
     AlertEngine,
     CrossScanner,
 )
+from .pmbot.engine import PmbotEngine
 
 # Optional Relayer Imports
 try:
@@ -115,6 +116,22 @@ class TraderState:
             self.db, status_callback=self.update_copy_status
         )
         self.alert_engine = AlertEngine(self.db)
+        self.pmbot_engine = PmbotEngine(self)
+        self.active_session_id = "demo"
+
+    def calculate_equity(self, session_id):
+        p = self.portfolios.get(session_id)
+        if not p:
+            return 0.0
+        equity = p["cash"]
+        for tid, pos in p.get("positions", {}).items():
+            price = self.market_prices.get(tid, {}).get("price", pos["avg_cost"])
+            equity += pos["shares"] * price
+        return round(equity, 2)
+
+    async def broadcast(self, payload):
+        """Proxy to global broadcast function."""
+        await broadcast(payload)
 
     def update_copy_status(self, status):
         self.engine_status["copy"]["status"] = status
@@ -553,6 +570,7 @@ async def on_startup():
     asyncio.create_task(news_loop())
     asyncio.create_task(prediction_loop())
     asyncio.create_task(state.copy_engine.start())
+    asyncio.create_task(state.pmbot_engine.start())
 
 
 async def prediction_loop():
@@ -850,7 +868,42 @@ async def price_heartbeat_loop():
             )
 
 
+from .pmbot.config import settings as pmbot_settings
+
 # ── API Endpoints ──────────────────────────────────────────
+
+@app.get("/pmbot/whales")
+async def get_pmbot_whales():
+    from .pmbot.whale_tracker import WALLET_REGISTRY
+    return WALLET_REGISTRY
+
+
+@app.get("/pmbot/config")
+async def get_pmbot_config():
+    # Filter out sensitive keys for the UI
+    data = pmbot_settings.dict()
+    sensitive = ["groq_api_key", "polymarket_api_key", "polygon_rpc_url", "telegram_bot_token", "telegram_chat_id"]
+    return {k: v for k, v in data.items() if k not in sensitive}
+
+@app.post("/pmbot/config")
+async def update_pmbot_config(config: dict):
+    for k, v in config.items():
+        if hasattr(pmbot_settings, k):
+            # Type casting based on original value
+            orig = getattr(pmbot_settings, k)
+            try:
+                if isinstance(orig, bool):
+                    setattr(pmbot_settings, k, bool(v))
+                elif isinstance(orig, int):
+                    setattr(pmbot_settings, k, int(v))
+                elif isinstance(orig, float):
+                    setattr(pmbot_settings, k, float(v))
+                else:
+                    setattr(pmbot_settings, k, str(v))
+            except: pass
+    pmbot_settings.save()
+    await broadcast_log("INFO", "PMBot Configuration updated and saved")
+    return {"status": "ok"}
 
 
 @app.websocket("/ws/{session_id}")
@@ -1166,6 +1219,29 @@ async def get_alerts(limit: int = 50):
     return state.db.get_recent_alerts(limit=limit)
 
 
+@app.get("/pmbot/db/query")
+async def query_pmbot_db(table: str = "pmbot_positions", limit: int = 100):
+    safe_limit = min(max(1, limit), 100)
+    # Filter for allowed tables in pmbot.db
+    if table not in ["pmbot_positions", "pmbot_signals", "consensus_votes", "wallet_activity"]:
+        return []
+    with state.pmbot_engine.db._get_conn() as conn:
+        rows = conn.execute(
+            f"SELECT * FROM {table} ORDER BY id DESC LIMIT ?", (safe_limit,)
+        ).fetchall()
+        data = [dict(r) for r in rows]
+        
+        # Enrich titles for positions if missing or looks like hex
+        if table == "pmbot_positions" and state.active_markets:
+            title_map = {m["id"]: m["question"] for m in state.active_markets}
+            for pos in data:
+                # If title is missing or is exactly the market_id (hex), try to resolve from active_markets
+                if not pos.get("title") or pos["title"] == pos["market_id"]:
+                    pos["title"] = title_map.get(pos["market_id"], pos.get("title") or "Unknown Market")
+        
+        return data
+
+
 @app.get("/db/query")
 async def query_db(table: str = "alerts", limit: int = 100):
     # Security: Hard-cap limit to prevent DoS
@@ -1229,6 +1305,7 @@ async def get_markets(featured: bool = False):
 
 
 async def handle_client_message(session_id, ws, msg):
+    state.active_session_id = session_id
     mtype = msg.get("type")
     if mtype == "trade":
         mode = msg.get("mode", "PAPER")
@@ -1603,3 +1680,8 @@ def execute_trade(session_id, msg):
     p.setdefault("history", []).append(rec)
 
     return {"success": True, "trade": rec}
+
+
+state.execute_trade = execute_trade
+state.execute_live_trade = execute_live_trade
+state.save_portfolios = save_portfolios

@@ -9,3 +9,8 @@ py-builder-relayer-client
 google-generativeai
 pyyaml
 groq
+web3
+pydantic-settings
+aiosqlite
+structlog
+python-telegram-bot

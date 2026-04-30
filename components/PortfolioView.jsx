@@ -31,7 +31,7 @@ const PortfolioView = memo(({ portfolio, prices, markets, setTradeModal, setTrad
   }, [eligiblePositions.length, playNotificationSound]);
 
   return (
-    <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <div className="portfolio-view" style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       {/* Stats row */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", borderBottom: "1px solid #1f2937" }}>
         {[
@@ -104,7 +104,7 @@ const PortfolioView = memo(({ portfolio, prices, markets, setTradeModal, setTrad
           </div>
         </div>
       )}
-      <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+      <div className="scroll-container" style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
         {Object.entries(portfolio.positions || {}).length === 0 ? (
           <div style={{ color: "#374151", fontSize: 12, padding: "16px 14px" }}>No open positions</div>
         ) : (
@@ -208,7 +208,7 @@ const PortfolioView = memo(({ portfolio, prices, markets, setTradeModal, setTrad
         </button>
       </div>
       {!isHistoryMinimized && (
-        <div style={{ overflowY: "auto", flex: 1 }}>
+        <div className="scroll-container" style={{ overflowY: "auto", flex: 1 }}>
           {(portfolio.history || []).length === 0 ? (
             <div style={{ color: "#374151", fontSize: 12, padding: "16px 14px" }}>No trades yet</div>
           ) : (

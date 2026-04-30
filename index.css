@@ -149,6 +149,12 @@ input[type=range] { accent-color: var(--primary); width: 100%; }
   100% { transform: scale(1); opacity: 1; }
 }
 
+@keyframes bg-pulse-green {
+  0% { background-color: transparent; }
+  50% { background-color: rgba(16, 185, 129, 0.2); }
+  100% { background-color: transparent; }
+}
+
 .badge {
   display: inline-block;
   padding: 2px 7px;

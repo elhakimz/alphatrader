@@ -1,8 +1,32 @@
-import { memo, useState } from "react";
+import { memo, useState, useEffect, useRef, useMemo } from "react";
 import { fmt$, fmtPct, fmtTs } from "../utils";
 
-const PortfolioView = memo(({ portfolio, prices, markets, setTradeModal, setTradeSide, setSelectedOutcome, setTradeShares, positionPnl }) => {
+const PortfolioView = memo(({ portfolio, prices, markets, setTradeModal, setTradeSide, setSelectedOutcome, setTradeShares, positionPnl, playNotificationSound }) => {
   const [isHistoryMinimized, setIsHistoryMinimized] = useState(false);
+  const lastEligibleCountRef = useRef(0);
+
+  // 1. Calculate eligibility across all positions
+  const eligiblePositions = useMemo(() => {
+    return Object.entries(portfolio.positions || {}).filter(([tid, pos]) => {
+      const currPrice = prices[tid]?.price ?? pos.avg_cost;
+      const pnlPct = ((currPrice - pos.avg_cost) / pos.avg_cost * 100);
+      
+      const market = markets.find(m => (m.tokens || []).some(t => (typeof t === "string" ? t : t.token_id || t.id) === tid));
+      const isExpired = market?.end_date && new Date(market.end_date) < new Date(window.SYSTEM_DATE || "2026-04-26");
+      
+      return !isExpired && pos.shares > 0 && pnlPct > 10;
+    });
+  }, [portfolio.positions, prices, markets]);
+
+  const hasEligible = eligiblePositions.length > 0;
+
+  // 2. Auditory alert on NEW eligibility
+  useEffect(() => {
+    if (eligiblePositions.length > lastEligibleCountRef.current) {
+      if (playNotificationSound) playNotificationSound();
+    }
+    lastEligibleCountRef.current = eligiblePositions.length;
+  }, [eligiblePositions.length, playNotificationSound]);
 
   return (
     <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -21,8 +45,20 @@ const PortfolioView = memo(({ portfolio, prices, markets, setTradeModal, setTrad
       </div>
 
       {/* Positions */}
-      <div style={{ padding: "10px 14px 4px", borderBottom: "1px solid #0d1117" }}>
-        <span style={{ color: "#374151", fontSize: 10, letterSpacing: ".06em" }}>POSITIONS</span>
+      <div style={{ 
+        padding: "10px 14px 4px", 
+        borderBottom: "1px solid #0d1117",
+        animation: hasEligible ? "bg-pulse-green 2s infinite" : "none",
+        transition: "background-color 0.5s ease"
+      }}>
+        <span style={{ 
+          color: hasEligible ? "#10b981" : "#374151", 
+          fontSize: 10, 
+          letterSpacing: ".06em",
+          fontWeight: hasEligible ? 700 : 400
+        }}>
+          POSITIONS {hasEligible && `[${eligiblePositions.length} READY]`}
+        </span>
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
         {Object.entries(portfolio.positions || {}).length === 0 ? (

@@ -670,7 +670,8 @@ export default function PolymarketTrader() {
           <div style={{ width: 400, minWidth: 400, height: "100%", display: "flex", flexDirection: "column" }}>
             <PortfolioView 
               portfolio={portfolio} prices={prices} markets={markets} setTradeModal={setTradeModal} 
-              setTradeSide={setTradeSide} setSelectedOutcome={setSelectedOutcome} setTradeShares={setTradeShares} positionPnl={stats.pnl}
+              setTradeSide={setTradeSide} setSelectedOutcome={setSelectedOutcome} setTradeShares={setTradeShares} 
+              positionPnl={stats.pnl} playNotificationSound={playNotificationSound}
             />
           </div>
         </div>

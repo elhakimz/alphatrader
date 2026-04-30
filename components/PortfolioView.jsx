@@ -37,6 +37,23 @@ const PortfolioView = memo(({ portfolio, prices, markets, setTradeModal, setTrad
             const isExpired = market?.end_date && new Date(market.end_date) < new Date(window.SYSTEM_DATE || "2026-04-26");
             const canSell = !isExpired && pos.shares > 0;
 
+            // Sell button dynamic color coding
+            let sellColor = "#4b5563"; // Default Gray
+            let sellBorder = "#1f2937";
+            
+            if (canSell) {
+              if (pnlPct > 10) {
+                sellColor = "#10b981"; // Green
+                sellBorder = "rgba(16, 185, 129, 0.4)";
+              } else if (pnlPct >= 0) {
+                sellColor = "#64748b"; // Light Gray
+                sellBorder = "#334155";
+              } else {
+                sellColor = "#ef4444"; // Red
+                sellBorder = "rgba(239, 68, 68, 0.4)";
+              }
+            }
+
             return (
               <div key={tid} style={{ padding: "10px 14px", borderBottom: "1px solid #0d1117", opacity: isExpired ? 0.6 : 1 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
@@ -52,8 +69,9 @@ const PortfolioView = memo(({ portfolio, prices, markets, setTradeModal, setTrad
                       padding: "2px 8px",
                       opacity: canSell ? 1 : 0.3,
                       cursor: canSell ? "pointer" : "not-allowed",
-                      border: "1px solid " + (canSell ? "#60a5fa" : "#1f2937"),
-                      color: canSell ? "#60a5fa" : "#4b5563"
+                      border: "1px solid " + sellBorder,
+                      color: sellColor,
+                      background: canSell ? "transparent" : "rgba(31, 41, 55, 0.2)"
                     }}
                     onClick={() => { 
                       if (!canSell) return;

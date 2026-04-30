@@ -1,7 +1,9 @@
-import { memo } from "react";
+import { memo, useState } from "react";
 import { fmt$, fmtPct, fmtTs } from "../utils";
 
 const PortfolioView = memo(({ portfolio, prices, markets, setTradeModal, setTradeSide, setSelectedOutcome, setTradeShares, positionPnl }) => {
+  const [isHistoryMinimized, setIsHistoryMinimized] = useState(false);
+
   return (
     <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       {/* Stats row */}
@@ -96,33 +98,49 @@ const PortfolioView = memo(({ portfolio, prices, markets, setTradeModal, setTrad
       </div>
 
       {/* Trade history */}
-      <div style={{ padding: "10px 14px 4px", borderBottom: "1px solid #0d1117", borderTop: "1px solid #1f2937" }}>
+      <div style={{ padding: "10px 14px 4px", borderBottom: "1px solid #0d1117", borderTop: "1px solid #1f2937", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <span style={{ color: "#374151", fontSize: 10, letterSpacing: ".06em" }}>TRADE HISTORY</span>
+        <button 
+          onClick={() => setIsHistoryMinimized(!isHistoryMinimized)}
+          style={{
+            background: "transparent",
+            border: "none",
+            color: "#4b5563",
+            fontSize: "12px",
+            cursor: "pointer",
+            padding: "2px 4px"
+          }}
+          title={isHistoryMinimized ? "Expand History" : "Minimize History"}
+        >
+          {isHistoryMinimized ? "[+]" : "[—]"}
+        </button>
       </div>
-      <div style={{ overflowY: "auto", flex: 1 }}>
-        {(portfolio.history || []).length === 0 ? (
-          <div style={{ color: "#374151", fontSize: 12, padding: "16px 14px" }}>No trades yet</div>
-        ) : (
-          [...(portfolio.history || [])].reverse().map((t, i) => (
-            <div key={t.id || i} style={{ padding: "10px 14px", borderBottom: "1px solid #0d1117" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <span className="badge" style={{ background: t.side === "buy" ? "#1e3a5f" : "#451a03", color: t.side === "buy" ? "#93c5fd" : "#fdba74", fontWeight: 800 }}>{t.side.toUpperCase()}</span>
-                  <span className="badge" style={{ background: t.outcome === "YES" ? "#064e3b" : "#450a0a", color: t.outcome === "YES" ? "#6ee7b7" : "#fca5a5" }}>{t.outcome}</span>
+      {!isHistoryMinimized && (
+        <div style={{ overflowY: "auto", flex: 1 }}>
+          {(portfolio.history || []).length === 0 ? (
+            <div style={{ color: "#374151", fontSize: 12, padding: "16px 14px" }}>No trades yet</div>
+          ) : (
+            [...(portfolio.history || [])].reverse().map((t, i) => (
+              <div key={t.id || i} style={{ padding: "10px 14px", borderBottom: "1px solid #0d1117" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <span className="badge" style={{ background: t.side === "buy" ? "#1e3a5f" : "#451a03", color: t.side === "buy" ? "#93c5fd" : "#fdba74", fontWeight: 800 }}>{t.side.toUpperCase()}</span>
+                    <span className="badge" style={{ background: t.outcome === "YES" ? "#064e3b" : "#450a0a", color: t.outcome === "YES" ? "#6ee7b7" : "#fca5a5" }}>{t.outcome}</span>
+                  </div>
+                  <span style={{ color: "#f1f5f9", fontWeight: 700, fontSize: 11 }}>{fmt$(t.cost)}</span>
                 </div>
-                <span style={{ color: "#f1f5f9", fontWeight: 700, fontSize: 11 }}>{fmt$(t.cost)}</span>
+                <div style={{ color: "#94a3b8", fontSize: 11, marginBottom: 6, lineHeight: 1.3 }}>
+                  {(t.market_question || t.question || "Unknown Market")}
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
+                  <div style={{ color: "#4b5563" }}>{t.shares.toFixed(2)} shares @ <span style={{ color: "#60a5fa" }}>{(t.price * 100).toFixed(1)}¢</span></div>
+                  <div style={{ color: "#374151" }}>{fmtTs(t.ts)}</div>
+                </div>
               </div>
-              <div style={{ color: "#94a3b8", fontSize: 11, marginBottom: 6, lineHeight: 1.3 }}>
-                {(t.market_question || t.question || "Unknown Market")}
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
-                <div style={{ color: "#4b5563" }}>{t.shares.toFixed(2)} shares @ <span style={{ color: "#60a5fa" }}>{(t.price * 100).toFixed(1)}¢</span></div>
-                <div style={{ color: "#374151" }}>{fmtTs(t.ts)}</div>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 });

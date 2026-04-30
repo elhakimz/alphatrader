@@ -3,6 +3,8 @@ import { fmt$, fmtPct, fmtTs } from "../utils";
 
 const PortfolioView = memo(({ portfolio, prices, markets, setTradeModal, setTradeSide, setSelectedOutcome, setTradeShares, positionPnl, playNotificationSound }) => {
   const [isHistoryMinimized, setIsHistoryMinimized] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [sellThreshold, setSellThreshold] = useState(10);
   const lastEligibleCountRef = useRef(0);
 
   // 1. Calculate eligibility across all positions
@@ -14,9 +16,9 @@ const PortfolioView = memo(({ portfolio, prices, markets, setTradeModal, setTrad
       const market = markets.find(m => (m.tokens || []).some(t => (typeof t === "string" ? t : t.token_id || t.id) === tid));
       const isExpired = market?.end_date && new Date(market.end_date) < new Date(window.SYSTEM_DATE || "2026-04-26");
       
-      return !isExpired && pos.shares > 0 && pnlPct > 10;
+      return !isExpired && pos.shares > 0 && pnlPct > sellThreshold;
     });
-  }, [portfolio.positions, prices, markets]);
+  }, [portfolio.positions, prices, markets, sellThreshold]);
 
   const hasEligible = eligiblePositions.length > 0;
 
@@ -49,7 +51,10 @@ const PortfolioView = memo(({ portfolio, prices, markets, setTradeModal, setTrad
         padding: "10px 14px 4px", 
         borderBottom: "1px solid #0d1117",
         animation: hasEligible ? "bg-pulse-green 2s infinite" : "none",
-        transition: "background-color 0.5s ease"
+        transition: "background-color 0.5s ease",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center"
       }}>
         <span style={{ 
           color: hasEligible ? "#10b981" : "#374151", 
@@ -59,7 +64,43 @@ const PortfolioView = memo(({ portfolio, prices, markets, setTradeModal, setTrad
         }}>
           POSITIONS {hasEligible && `[${eligiblePositions.length} READY]`}
         </span>
+        <button 
+          onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+          style={{
+            background: "transparent",
+            border: "none",
+            color: isSettingsOpen ? "#60a5fa" : "#4b5563",
+            fontSize: "12px",
+            cursor: "pointer",
+            padding: "2px 4px"
+          }}
+          title="Profit Alerts Settings"
+        >
+          {isSettingsOpen ? "[SETTING]" : "[⚙]"}
+        </button>
       </div>
+
+      {isSettingsOpen && (
+        <div style={{ padding: "12px 14px", borderBottom: "1px solid #1f2937", background: "rgba(31, 41, 55, 0.1)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <span style={{ fontSize: 10, color: "#94a3b8" }}>SELL THRESHOLD</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#60a5fa" }}>{sellThreshold}% PROFIT</span>
+          </div>
+          <input 
+            type="range" 
+            min="0" 
+            max="100" 
+            step="1"
+            value={sellThreshold} 
+            onChange={(e) => setSellThreshold(parseInt(e.target.value))}
+            style={{ marginBottom: 4 }}
+          />
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "#4b5563" }}>
+            <span>0% (SCALPER)</span>
+            <span>100% (MOON)</span>
+          </div>
+        </div>
+      )}
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
         {Object.entries(portfolio.positions || {}).length === 0 ? (
           <div style={{ color: "#374151", fontSize: 12, padding: "16px 14px" }}>No open positions</div>
@@ -80,7 +121,7 @@ const PortfolioView = memo(({ portfolio, prices, markets, setTradeModal, setTrad
             let sellBorder = "#1f2937";
             
             if (canSell) {
-              if (pnlPct > 10) {
+              if (pnlPct > sellThreshold) {
                 sellColor = "#10b981"; // Green
                 sellBorder = "rgba(16, 185, 129, 0.4)";
               } else if (pnlPct >= 0) {

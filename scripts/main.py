@@ -102,6 +102,9 @@ class TraderState:
             "news": {"status": "active", "last_ping": time.time()},
         }
 
+        # Predictions
+        self.market_predictions: Dict[str, dict] = {}
+
         # Engines
         self.db = DetectorDB()
         self.arb_scanner = ArbScanner()
@@ -548,7 +551,55 @@ async def on_startup():
     asyncio.create_task(state_pruning_loop())
     # asyncio.create_task(scanner_loop()) # Now handled by standalone worker
     asyncio.create_task(news_loop())
+    asyncio.create_task(prediction_loop())
     asyncio.create_task(state.copy_engine.start())
+
+
+async def prediction_loop():
+    """Evaluate market profitability every minute."""
+    await broadcast_log("INFO", "Prediction Engine started")
+    while True:
+        try:
+            # Mark processing
+            state.engine_status["api"]["status"] = "processing"
+
+            new_predictions = {}
+            for market in state.active_markets:
+                m_id = market["id"]
+                # 1. Math logic: Arbitrage
+                arb = state.arb_scanner.scan(market)
+                if arb:
+                    new_predictions[m_id] = {
+                        "edge": "YES" if arb["details"]["total"] < 1.0 else "NO",
+                        "confidence": arb["profit_pct"],
+                        "reason": arb["action"],
+                    }
+                    continue
+
+                # 2. AI logic: Recent estimates
+                latest_ai = state.db.get_latest_ai_estimate(m_id)
+                if latest_ai:
+                    fair = latest_ai["fair_prob"]
+                    market_p = latest_ai["market_price"]
+                    edge = fair - market_p
+                    if abs(edge) > 0.05:  # 5% threshold for visual cues
+                        new_predictions[m_id] = {
+                            "edge": "YES" if edge > 0 else "NO",
+                            "confidence": abs(edge) * 100,
+                            "reason": f"AI Edge: {abs(edge)*100:.1f}%",
+                        }
+                        continue
+
+            state.market_predictions = new_predictions
+            await broadcast(
+                {"type": "predictions_update", "predictions": state.market_predictions}
+            )
+
+            state.engine_status["api"]["status"] = "active"
+            await asyncio.sleep(60)
+        except Exception as e:
+            print(f"[Prediction] Error: {e}")
+            await asyncio.sleep(10)
 
 
 async def news_loop():

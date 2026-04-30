@@ -69,6 +69,7 @@ export default function PolymarketTrader() {
   const [alerts, setAlerts] = useState([]);
   const [news, setNews] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [predictions, setPredictions] = useState({});
   const [intelligenceReport, setIntelligenceReport] = useState(null);
   const [isIntelligenceLoading, setIsIntelligenceLoading] = useState(false);
   const [scannerStats, setScannerStats] = useState({ markets_count: 0, scans_today: 0, alerts_today: 0, last_scan: null });
@@ -321,6 +322,8 @@ export default function PolymarketTrader() {
           playNotificationSound();
           // Hide after 3 minutes (180,000 ms)
           setTimeout(() => setNotifications(prev => prev.filter(n => n.id !== id)), 180000);
+        } else if (msg.type === "predictions_update") {
+          if (msg.predictions) setPredictions(msg.predictions);
         } else if (msg.type === "copy_executed" && msg.session_id === SESSION_ID) {
           const id = Math.random().toString(36).slice(2, 9);
           const alert = {
@@ -612,6 +615,7 @@ export default function PolymarketTrader() {
                 sortConfig={sortConfig}
                 setSortConfig={setSortConfig}
                 viewMode={viewMode}
+                predictions={predictions}
               />
               </>
             )}

@@ -316,6 +316,14 @@ class DetectorDB:
             )
             return [dict(row) for row in curr.fetchall()]
 
+    def get_latest_ai_estimate(self, market_id: str) -> Optional[dict]:
+        with self._get_conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM ai_estimates WHERE market_id = ? ORDER BY created_at DESC LIMIT 1",
+                (market_id,),
+            ).fetchone()
+            return dict(row) if row else None
+
     def insert_news_item(self, item: dict):
         with self._get_conn() as conn:
             conn.execute(

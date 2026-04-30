@@ -12,7 +12,8 @@ const MarketList = memo(({
   connState,
   sortConfig,
   setSortConfig,
-  viewMode
+  viewMode,
+  predictions = {}
 }) => {
   const handleSort = (key) => {
     setSortConfig(prev => ({
@@ -51,11 +52,19 @@ const MarketList = memo(({
           const isExpired = m.end_date && new Date(m.end_date) < new Date(systemDateStr);
           const isNew = m.start_date && new Date(m.start_date).toISOString().split('T')[0] === new Date(systemDateStr).toISOString().split('T')[0];
           const chance = Math.round(yesPrice * 100);
+          const pred = predictions[m.id];
 
           return (
             <div 
               key={m.id || i}
               className={"market-card" + (isSelected ? " selected" : "")}
+              style={{ 
+                background: isSelected ? "#1e293b" : (
+                  pred?.edge === "YES" ? "rgba(16, 185, 129, 0.08)" : 
+                  pred?.edge === "NO" ? "rgba(239, 68, 68, 0.08)" : "#0d1117"
+                ),
+                border: pred ? `1px solid ${pred.edge === 'YES' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}` : "1px solid #1f2937"
+              }}
               onClick={() => setSelectedMarketId(m.id)}
             >
               <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
@@ -68,7 +77,8 @@ const MarketList = memo(({
                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 4 }}>
                       {isNew && <span className="badge" style={{ background: "#1e3a5f", color: "#93c5fd" }}>NEW</span>}
                       {isExpired && <span className="badge" style={{ background: "#7f1d1d", color: "#fca5a5" }}>EXPIRED</span>}
-                      {m.category && <span className="badge" style={{ background: "#1c1c2e", color: "#8b8bbd" }}>{m.category.toUpperCase().slice(0, 10)}</span>}
+                      {pred && <span className="badge" style={{ background: pred.edge === 'YES' ? '#064e3b' : '#450a0a', color: pred.edge === 'YES' ? '#6ee7b7' : '#fca5a5', fontWeight: 800 }}>{pred.edge} EDGE</span>}
+                      {m.category && <span className="badge" style={{ background: "#1c1c2e", color: "#8b8bdd" }}>{m.category.toUpperCase().slice(0, 10)}</span>}
                    </div>
                    <div style={{ color: isExpired ? "#64748b" : "#e2e8f0", fontSize: 13, fontWeight: 600, lineHeight: 1.4 }}>
                      {m.question}
@@ -159,17 +169,24 @@ const MarketList = memo(({
             const systemDateStr = window.SYSTEM_DATE || "2026-04-26";
             const isExpired = m.end_date && new Date(m.end_date) < new Date(systemDateStr);
             const isNew = m.start_date && new Date(m.start_date).toISOString().split('T')[0] === new Date(systemDateStr).toISOString().split('T')[0];
+            const pred = predictions[m.id];
+
+            const rowBg = isSelected ? "#1e293b" : (
+              pred?.edge === "YES" ? "rgba(16, 185, 129, 0.08)" : 
+              pred?.edge === "NO" ? "rgba(239, 68, 68, 0.08)" : (i % 2 === 0 ? "transparent" : "#070a0e")
+            );
 
             return (
               <tr key={m.id || i} 
                 className={"mkt-row" + (isSelected ? " selected" : "")} 
                 onClick={() => setSelectedMarketId(isSelected ? null : m.id)}
-                style={{ borderBottom: "1px solid #111827", background: i % 2 === 0 ? "transparent" : "#070a0e" }}>
+                style={{ borderBottom: "1px solid #111827", background: rowBg }}>
                 <td style={{ padding: "9px 12px", maxWidth: 280 }}>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 4 }}>
                     {isNew && <span className="badge" style={{ background: "#1e3a5f", color: "#93c5fd" }}>NEW</span>}
                     {isExpired && <span className="badge" style={{ background: "#7f1d1d", color: "#fca5a5" }}>EXPIRED</span>}
                     {havePos && <span className="badge" style={{ background: "#1e3a5f", color: "#93c5fd" }}>POS</span>}
+                    {pred && <span className="badge" style={{ background: pred.edge === 'YES' ? '#064e3b' : '#450a0a', color: pred.edge === 'YES' ? '#6ee7b7' : '#fca5a5', fontWeight: 800 }}>{pred.edge} EDGE</span>}
                     {m.category && <span className="badge" style={{ background: "#1c1c2e", color: "#8b8bbd" }}>{m.category.toUpperCase().slice(0, 8)}</span>}
                   </div>
                   <span style={{ color: isExpired ? "#64748b" : "#cbd5e1", fontSize: 12, lineHeight: 1.4 }}>{(m.question || "").slice(0, 80)}{(m.question || "").length > 80 ? "…" : ""}</span>

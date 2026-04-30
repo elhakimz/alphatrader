@@ -169,9 +169,18 @@ const PortfolioView = memo(({ portfolio, prices, markets, setTradeModal, setTrad
                     onClick={(e) => { 
                       e.stopPropagation(); // Prevent row click
                       if (!canSell) return;
+                      
+                      // Correctly resolve outcome index if market exists
+                      let outcomeIdx = 0;
+                      if (market) {
+                        const tokenList = market.tokens || [];
+                        const foundIdx = tokenList.findIndex(t => (typeof t === "string" ? t : t.token_id || t.id) === tid);
+                        if (foundIdx !== -1) outcomeIdx = foundIdx;
+                      }
+
                       setTradeModal(market || { question: pos.question, tokens: [tid], outcomes: [pos.outcome], outcome_prices: [String(currPrice)] }); 
                       setTradeSide("sell"); 
-                      setSelectedOutcome(0); 
+                      setSelectedOutcome(outcomeIdx); 
                       setTradeShares(String(pos.shares)); 
                     }}>
                     SELL

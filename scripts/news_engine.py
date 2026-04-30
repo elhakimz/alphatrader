@@ -9,13 +9,20 @@ import os
 import json
 import urllib.parse
 
+
 class NewsEngine:
     def __init__(self, db, api_key: Optional[str] = None):
         self.db = db
         self.feeds = [
-            {"name": "Reuters World", "url": "https://www.reutersagency.com/feed/?best-types=world-news&post_type=best"},
-            {"name": "CoinDesk", "url": "https://www.coindesk.com/arc/outboundfeeds/rss/"},
-            {"name": "CryptoPanic", "url": "https://cryptopanic.com/news/rss/"}
+            {
+                "name": "Reuters World",
+                "url": "https://www.reutersagency.com/feed/?best-types=world-news&post_type=best",
+            },
+            {
+                "name": "CoinDesk",
+                "url": "https://www.coindesk.com/arc/outboundfeeds/rss/",
+            },
+            {"name": "CryptoPanic", "url": "https://cryptopanic.com/news/rss/"},
         ]
         self.api_key = api_key
         self.client = None
@@ -36,27 +43,41 @@ class NewsEngine:
                 resp = await client.get(feed_config["url"])
                 if resp.status_code != 200:
                     return []
-                
+
                 root = ET.fromstring(resp.text)
                 items = []
-                for entry in root.findall(".//item")[:10]: # Top 10 per feed
-                    title = entry.find("title").text if entry.find("title") is not None else "No Title"
-                    link = entry.find("link").text if entry.find("link") is not None else ""
-                    pub_date = entry.find("pubDate").text if entry.find("pubDate") is not None else datetime.utcnow().isoformat()
-                    
+                for entry in root.findall(".//item")[:10]:  # Top 10 per feed
+                    title = (
+                        entry.find("title").text
+                        if entry.find("title") is not None
+                        else "No Title"
+                    )
+                    link = (
+                        entry.find("link").text
+                        if entry.find("link") is not None
+                        else ""
+                    )
+                    pub_date = (
+                        entry.find("pubDate").text
+                        if entry.find("pubDate") is not None
+                        else datetime.utcnow().isoformat()
+                    )
+
                     # Generate a stable ID based on URL
                     item_id = hashlib.sha256(link.encode()).hexdigest()[:16]
-                    
-                    items.append({
-                        "id": item_id,
-                        "headline": title,
-                        "source": feed_config["name"],
-                        "url": link,
-                        "ts": pub_date,
-                        "summary": "", # To be filled by AI
-                        "pis": 0,      # To be filled by AI
-                        "sentiment": "NEUTRAL"
-                    })
+
+                    items.append(
+                        {
+                            "id": item_id,
+                            "headline": title,
+                            "source": feed_config["name"],
+                            "url": link,
+                            "ts": pub_date,
+                            "summary": "",  # To be filled by AI
+                            "pis": 0,  # To be filled by AI
+                            "sentiment": "NEUTRAL",
+                        }
+                    )
                 return items
             except Exception as e:
                 print(f"[News] Error fetching {feed_config['name']}: {e}")
@@ -71,26 +92,40 @@ class NewsEngine:
                 resp = await client.get(url)
                 if resp.status_code != 200:
                     return []
-                
+
                 root = ET.fromstring(resp.text)
                 items = []
-                for entry in root.findall(".//item")[:5]: # Top 5 for specific search
-                    title = entry.find("title").text if entry.find("title") is not None else ""
-                    link = entry.find("link").text if entry.find("link") is not None else ""
-                    pub_date = entry.find("pubDate").text if entry.find("pubDate") is not None else datetime.utcnow().isoformat()
-                    
+                for entry in root.findall(".//item")[:5]:  # Top 5 for specific search
+                    title = (
+                        entry.find("title").text
+                        if entry.find("title") is not None
+                        else ""
+                    )
+                    link = (
+                        entry.find("link").text
+                        if entry.find("link") is not None
+                        else ""
+                    )
+                    pub_date = (
+                        entry.find("pubDate").text
+                        if entry.find("pubDate") is not None
+                        else datetime.utcnow().isoformat()
+                    )
+
                     item_id = hashlib.sha256(link.encode()).hexdigest()[:16]
-                    
-                    items.append({
-                        "id": item_id,
-                        "headline": title,
-                        "source": "Google News Search",
-                        "url": link,
-                        "ts": pub_date,
-                        "summary": "",
-                        "pis": 0,
-                        "sentiment": "NEUTRAL"
-                    })
+
+                    items.append(
+                        {
+                            "id": item_id,
+                            "headline": title,
+                            "source": "Google News Search",
+                            "url": link,
+                            "ts": pub_date,
+                            "summary": "",
+                            "pis": 0,
+                            "sentiment": "NEUTRAL",
+                        }
+                    )
                 return items
             except Exception as e:
                 print(f"[News] Search error for '{query}': {e}")
@@ -104,11 +139,13 @@ class NewsEngine:
             item["pis"] = 10
             return item
 
-        market_context = "\n".join([f"- {m['id']}: {m['question']}" for m in markets[:20]])
+        market_context = "\n".join(
+            [f"- {m['id']}: {m['question']}" for m in markets[:20]]
+        )
         prompt = f"""
         Analyze this news headline for a prediction market platform:
-        Headline: {item['headline']}
-        Source: {item['source']}
+        Headline: {item["headline"]}
+        Source: {item["source"]}
 
         Available Markets:
         {market_context}
@@ -134,22 +171,24 @@ class NewsEngine:
                 self.client.chat.completions.create,
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
-                response_format={"type": "json_object"}
+                response_format={"type": "json_object"},
             )
             data = json.loads(response.choices[0].message.content)
-            
+
             mid = data.get("market_id")
             if mid == "None" or mid == "null" or mid == "":
                 mid = None
 
-            item.update({
-                "summary": data.get("summary", ""),
-                "market_id": mid,
-                "pis": data.get("pis", 0),
-                "sentiment": data.get("sentiment", "NEUTRAL")
-            })
+            item.update(
+                {
+                    "summary": data.get("summary", ""),
+                    "market_id": mid,
+                    "pis": data.get("pis", 0),
+                    "sentiment": data.get("sentiment", "NEUTRAL"),
+                }
+            )
         except Exception as e:
             print(f"[News] Enrichment error for {item['id']}: {e}")
             item["summary"] = "Enrichment failed."
-        
+
         return item

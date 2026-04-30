@@ -1,5 +1,6 @@
 import { useState, useEffect, memo, useCallback, useMemo } from "react";
 import CopyConfigModal from "./CopyConfigModal";
+import WalletProfile from "./WalletProfile";
 
 /**
  * CopyTradingHub Component
@@ -13,6 +14,7 @@ const CopyTradingHub = memo(({ session_id, onMarketClick, markets = [] }) => {
   const [copiedTrades, setCopiedTrades] = useState([]);
   const [sortConfig, setSortConfig] = useState({ key: "ts", direction: "desc" });
   const [activeConfigWallet, setActiveConfigWallet] = useState(null);
+  const [selectedWalletProfile, setSelectedWalletProfile] = useState(null);
 
   // Sync data
   const refreshData = useCallback(async () => {
@@ -191,9 +193,24 @@ const CopyTradingHub = memo(({ session_id, onMarketClick, markets = [] }) => {
             onConfigure={setActiveConfigWallet}
           />
         )}
-        {subTab === "discover" && <DiscoverList onFollow={handleFollow} alreadyFollowing={followedWallets} />}
+        {subTab === "discover" && <DiscoverList onFollow={handleFollow} alreadyFollowing={followedWallets} onViewProfile={setSelectedWalletProfile} />}
         {subTab === "my copies" && <CopiedTradesList items={copiedTrades} onMarketClick={onMarketClick} />}
       </div>
+
+      {selectedWalletProfile && (
+        <WalletProfile 
+          wallet={selectedWalletProfile}
+          session_id={session_id}
+          isFollowing={followedWallets.some(f => f.wallet_address.toLowerCase() === selectedWalletProfile.wallet_address.toLowerCase())}
+          onClose={() => setSelectedWalletProfile(null)}
+          onFollow={handleFollow}
+          onUnfollow={handleUnfollow}
+          onSetupCopy={() => {
+            setActiveConfigWallet(selectedWalletProfile);
+            setSelectedWalletProfile(null);
+          }}
+        />
+      )}
 
       {activeConfigWallet && (
         <CopyConfigModal 
@@ -351,7 +368,7 @@ const FollowingList = ({ wallets, configs, onUnfollow, onConfigure }) => (
   </div>
 );
 
-const DiscoverList = ({ onFollow, alreadyFollowing }) => {
+const DiscoverList = ({ onFollow, alreadyFollowing, onViewProfile }) => {
   const [suggested, setSuggested] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -374,28 +391,47 @@ const DiscoverList = ({ onFollow, alreadyFollowing }) => {
 
   return (
     <div style={{ padding: "16px 20px" }}>
-      <h3 style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", marginBottom: 16 }}>SUGGESTED ALPHA WALLETS</h3>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <h3 style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", margin: 0 }}>LIVE ALPHA LEADERBOARD (24H)</h3>
+        <span style={{ fontSize: 9, color: "#4b5563" }}>REAL-TIME POLYMARKET DATA</span>
+      </div>
+      
       {suggested.map(s => {
         const addr = s.wallet_address || s.address;
         const alias = s.alias;
         const isFollowing = alreadyFollowing.some(f => f.wallet_address.toLowerCase() === addr.toLowerCase());
         return (
-          <div key={addr} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 12, background: "#0d1117", border: "1px solid #1f2937", borderRadius: 4, marginBottom: 10 }}>
-            <div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ fontSize: 12, color: "#f8fafc", fontWeight: 600 }}>{alias}</div>
-                {s.category && <span className="badge" style={{ fontSize: 8, padding: "1px 4px" }}>{s.category.toUpperCase()}</span>}
+          <div key={addr} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", background: "#0d1117", border: "1px solid #1f2937", borderRadius: 8, marginBottom: 12, transition: "all 0.2s" }} className="market-card">
+            <div style={{ cursor: "pointer" }} onClick={() => onViewProfile(s)}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 10, color: "#a855f7", fontWeight: 800 }}>#{s.rank || "?"}</span>
+                <div style={{ fontSize: 13, color: "#f8fafc", fontWeight: 700 }}>{alias}</div>
+                {s.category && <span className="badge" style={{ fontSize: 8, padding: "1px 4px", background: "#1e1b4b", color: "#a5b4fc" }}>{s.category.toUpperCase()}</span>}
               </div>
-              <div style={{ fontSize: 10, color: "#4b5563" }}>{addr.slice(0, 20)}...</div>
+              <div style={{ display: "flex", gap: 12, marginTop: 6 }}>
+                <div style={{ fontSize: 10, color: "#4b5563" }}>{addr.slice(0, 10)}...{addr.slice(-8)}</div>
+                {s.pnl !== undefined && (
+                  <div style={{ fontSize: 10, color: s.pnl >= 0 ? "#10b981" : "#ef4444", fontWeight: 600 }}>
+                    {s.pnl >= 0 ? "+" : ""}${Math.abs(s.pnl).toLocaleString()} PNL
+                  </div>
+                )}
+              </div>
             </div>
-            <button 
-              className="btn-primary" 
-              disabled={isFollowing}
-              style={{ fontSize: 10, opacity: isFollowing ? 0.5 : 1 }}
-              onClick={() => onFollow(addr, alias)}
-            >
-              {isFollowing ? "FOLLOWING" : "FOLLOW"}
-            </button>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button 
+                className="btn-ghost" 
+                style={{ fontSize: 10, color: "#94a3b8" }}
+                onClick={() => onViewProfile(s)}
+              >PROFILE</button>
+              <button 
+                className="btn-primary" 
+                disabled={isFollowing}
+                style={{ fontSize: 10, opacity: isFollowing ? 0.5 : 1, minWidth: 80 }}
+                onClick={() => onFollow(addr, alias)}
+              >
+                {isFollowing ? "FOLLOWING" : "FOLLOW"}
+              </button>
+            </div>
           </div>
         );
       })}

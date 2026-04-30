@@ -7,6 +7,8 @@
 - [x] Verify Frontend Accessibility
 
 ## Status
-- **Backend**: Running (PID 29240). Connected to Polymarket CLOB.
-- **Frontend**: Running on :5173.
-- **Config**: Chain ID 80002 (Amoy Testnet).
+- **Backend**: Running (PID 5752, Port 8888).
+- **Frontend**: Running (PID 38052, Port 5173).
+- **Scanner Worker**: Running (PID 37896).
+- **Config**: Chain ID 137 (Polygon Mainnet) detected in logs.
+- **Linter**: Passed.

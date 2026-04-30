@@ -94,14 +94,28 @@ class TraderState:
         self.alerts_today = 0
         self.last_scan_ts = None
 
+        # Engine Status
+        self.engine_status: Dict[str, dict] = {
+            "api": {"status": "active", "last_ping": time.time()},
+            "scanner": {"status": "off", "last_ping": None},
+            "copy": {"status": "active", "last_ping": time.time()},
+            "news": {"status": "active", "last_ping": time.time()},
+        }
+
         # Engines
         self.db = DetectorDB()
         self.arb_scanner = ArbScanner()
         self.cross_scanner = CrossScanner()
         self.groq_estimator = GroqEstimator(os.getenv("GROQ_API_KEY"))
         self.news_engine = NewsEngine(self.db, os.getenv("GROQ_API_KEY"))
-        self.copy_engine = CopyTradingEngine(self.db)
+        self.copy_engine = CopyTradingEngine(
+            self.db, status_callback=self.update_copy_status
+        )
         self.alert_engine = AlertEngine(self.db)
+
+    def update_copy_status(self, status):
+        self.engine_status["copy"]["status"] = status
+        self.engine_status["copy"]["last_ping"] = time.time()
 
     def get_all_tracked_tokens(self) -> List[str]:
         """Get tokens from active markets and all current portfolio positions."""
@@ -542,6 +556,7 @@ async def news_loop():
     await broadcast_log("INFO", "News Engine started")
     while True:
         try:
+            state.engine_status["news"]["status"] = "processing"
             items = await state.news_engine.fetch_all()
             if items:
                 # Check for new items (Simplicity: check if ID in recent state)
@@ -574,9 +589,12 @@ async def news_loop():
                                 "INFO", f"BREAKING NEWS: {enriched['headline']}"
                             )
 
+            state.engine_status["news"]["status"] = "active"
+            state.engine_status["news"]["last_ping"] = time.time()
             # Poll every 10 minutes
             await asyncio.sleep(600)
         except Exception as e:
+            state.engine_status["news"]["status"] = "off"
             await broadcast_log("ERROR", f"News loop error: {e}")
             await asyncio.sleep(60)
 
@@ -749,7 +767,13 @@ async def state_pruning_loop():
 
 async def price_heartbeat_loop():
     while True:
-        await asyncio.sleep(1)
+        await asyncio.sleep(5)  # Every 5 seconds for status
+        
+        # Check scanner timeout (10 mins)
+        s_stats = state.engine_status["scanner"]
+        if s_stats["last_ping"] and (time.time() - s_stats["last_ping"] > 600):
+            s_stats["status"] = "off"
+
         if state.ws_clients:
             active_tids = set(state.get_all_tracked_tokens())
             payload_prices = {
@@ -769,6 +793,7 @@ async def price_heartbeat_loop():
                     "type": "heartbeat",
                     "prices": payload_prices,
                     "ws_status": state.ws_status,
+                    "engine_status": state.engine_status,
                     "ts": datetime.utcnow().isoformat(),
                 }
             )
@@ -987,6 +1012,16 @@ async def get_my_copies(session_id: str, limit: int = 50):
             (session_id, limit),
         )
         return [dict(row) for row in curr.fetchall()]
+
+
+@app.post("/notify/heartbeat")
+async def notify_heartbeat(msg: dict):
+    """Internal endpoint for standalone workers to ping their status."""
+    engine = msg.get("engine", "scanner")
+    status = msg.get("status", "active")
+    if engine in state.engine_status:
+        state.engine_status[engine] = {"status": status, "last_ping": time.time()}
+    return {"status": "ok"}
 
 
 @app.post("/notify/new_alert")

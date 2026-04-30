@@ -72,6 +72,12 @@ export default function PolymarketTrader() {
   const [intelligenceReport, setIntelligenceReport] = useState(null);
   const [isIntelligenceLoading, setIsIntelligenceLoading] = useState(false);
   const [scannerStats, setScannerStats] = useState({ markets_count: 0, scans_today: 0, alerts_today: 0, last_scan: null });
+  const [systemStatus, setSystemStatus] = useState({
+    api: { status: "active" },
+    scanner: { status: "off" },
+    copy: { status: "off" },
+    news: { status: "off" }
+  });
   
   // Buffers for high-frequency data
   const priceBufferRef = useRef({});
@@ -290,6 +296,7 @@ export default function PolymarketTrader() {
             orderBookBufferRef.current = { ...orderBookBufferRef.current, ...msg.order_books };
           }
           if (msg.ws_status) setWsStatus(msg.ws_status);
+          if (msg.engine_status) setSystemStatus(msg.engine_status);
         } else if (msg.type === "trade_result") {
           if (msg.mode === "LIVE") send({ type: "sync_live_state" });
           else setPaperPortfolio(msg.portfolio);
@@ -500,6 +507,7 @@ export default function PolymarketTrader() {
         isLogsVisible={isLogsVisible} setIsLogsVisible={setIsLogsVisible}
         showChart={showChart} setShowChart={setShowChart}
         showPortfolio={showPortfolio} setShowPortfolio={setShowPortfolio}
+        systemStatus={systemStatus}
       />
       
       <div className="main-layout">

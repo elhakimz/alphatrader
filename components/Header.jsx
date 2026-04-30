@@ -18,8 +18,16 @@ export default function Header({
   showChart,
   setShowChart,
   showPortfolio,
-  setShowPortfolio
+  setShowPortfolio,
+  systemStatus
 }) {
+  const engines = [
+    { id: 'api', label: 'API Engine', icon: '📟' },
+    { id: 'scanner', label: 'Alpha Scanner', icon: '📡' },
+    { id: 'copy', label: 'Copy Trading', icon: '👥' },
+    { id: 'news', label: 'News Engine', icon: '📰' },
+  ];
+
   return (
     <div style={{ background: "#060809", borderBottom: "1px solid #1f2937", padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
@@ -28,6 +36,27 @@ export default function Header({
           <span style={{ color: connDot, fontSize: 11, fontWeight: 600 }}>{connLabel}</span>
           {wsStatus.messages_received > 0 && <span style={{ color: "#4b5563", fontSize: 10 }}>·{wsStatus.messages_received} msgs</span>}
         </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "0 10px", borderRight: "1px solid #1f2937", marginRight: 5 }}>
+          {engines.map(eng => {
+            const status = systemStatus?.[eng.id]?.status || 'off';
+            const color = status === 'active' ? '#10b981' : status === 'processing' ? '#f59e0b' : '#ef4444';
+            return (
+              <div key={eng.id} title={`${eng.label}: ${status.toUpperCase()}`} style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'help' }}>
+                <span style={{ fontSize: 14, filter: status === 'off' ? 'grayscale(1) opacity(0.5)' : 'none' }}>{eng.icon}</span>
+                <span style={{ 
+                  width: 5, 
+                  height: 5, 
+                  borderRadius: '50%', 
+                  background: color, 
+                  boxShadow: status !== 'off' ? `0 0 5px ${color}` : 'none',
+                  animation: status === 'processing' ? 'pulse 1s infinite' : 'none'
+                }} />
+              </div>
+            );
+          })}
+        </div>
+
         <div style={{ display: "flex", alignItems: "center", background: "#0d1117", border: "1px solid #1f2937", borderRadius: 6, overflow: "hidden", cursor: "pointer" }} onClick={() => setTradeMode(m => m === "PAPER" ? "LIVE" : "PAPER")}>
           <div style={{ padding: "4px 10px", fontSize: 11, fontWeight: 600, background: tradeMode === "PAPER" ? "#374151" : "transparent", color: tradeMode === "PAPER" ? "#f8fafc" : "#64748b" }}>PAPER</div>
           <div style={{ padding: "4px 10px", fontSize: 11, fontWeight: 600, background: tradeMode === "LIVE" ? "#ef4444" : "transparent", color: tradeMode === "LIVE" ? "#fee2e2" : "#64748b" }}>LIVE</div>

@@ -38,6 +38,19 @@ async def fetch_markets():
         return []
 
 
+async def notify_heartbeat(status="active"):
+    """Ping the main app to show we are alive."""
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                "http://localhost:8888/notify/heartbeat",
+                json={"engine": "scanner", "status": status},
+                timeout=5.0,
+            )
+    except Exception as e:
+        print(f"[Worker] Heartbeat error: {e}")
+
+
 async def notify_main_app(alert):
     """Notify the main API server about a new alert."""
     try:
@@ -93,11 +106,13 @@ async def run_worker():
 
     while True:
         try:
+            await notify_heartbeat("processing")
             print(
                 f"\n[Worker] [{datetime.now().strftime('%H:%M:%S')}] Starting full market scan..."
             )
             markets = await fetch_markets()
             if not markets:
+                await notify_heartbeat("active")
                 print("[Worker] No active markets found. Retrying in 60s...")
                 await asyncio.sleep(60)
                 continue
@@ -182,6 +197,7 @@ async def run_worker():
                         print(f"[Worker] ALERT: AI ALPHA in {m['question'][:40]}")
                         await notify_main_app(alert)
 
+            await notify_heartbeat("active")
             print("[Worker] Scan complete. Next run in 5 minutes.")
             await asyncio.sleep(300)
 

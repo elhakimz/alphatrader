@@ -9,13 +9,18 @@ DATA_API = "https://data-api.polymarket.com"
 
 
 class CopyTradingEngine:
-    def __init__(self, db: DetectorDB, on_action=None, get_market=None):
+    def __init__(self, db: DetectorDB, on_action=None, get_market=None, status_callback=None):
         self.db = db
         self.on_action = on_action
         self.get_market = get_market
+        self.status_callback = status_callback
         self.polling_task = None
         self.resolution_task = None
         self.is_running = False
+
+    def _update_status(self, status):
+        if self.status_callback:
+            self.status_callback(status)
 
     async def _log(self, level, msg):
         """Helper to print and broadcast logs."""
@@ -57,8 +62,10 @@ class CopyTradingEngine:
         """Settle PnL for closed markets every 5 minutes."""
         while self.is_running:
             try:
+                self._update_status("processing")
                 unresolved = self.db.get_unresolved_copy_trades()
                 if not unresolved:
+                    self._update_status("active")
                     await asyncio.sleep(300)
                     continue
 
@@ -142,6 +149,7 @@ class CopyTradingEngine:
     async def _poll_loop(self):
         while self.is_running:
             try:
+                self._update_status("processing")
                 # 1. Get all unique followed wallets across all sessions
                 # For v1 simplicity, we'll fetch from the DB directly
                 with self.db._get_conn() as conn:
@@ -155,6 +163,7 @@ class CopyTradingEngine:
                     for wallet in wallets:
                         await self._sync_wallet_activity(wallet)
 
+                self._update_status("active")
                 # Poll every 60 seconds
                 await asyncio.sleep(60)
             except Exception as e:

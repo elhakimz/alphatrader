@@ -1,7 +1,7 @@
 import { memo, useState, useEffect, useRef, useMemo } from "react";
 import { fmt$, fmtPct, fmtTs } from "../utils";
 
-const PortfolioView = memo(({ portfolio, prices, markets, setTradeModal, setTradeSide, setSelectedOutcome, setTradeShares, positionPnl, playNotificationSound }) => {
+const PortfolioView = memo(({ portfolio, prices, markets, setTradeModal, setTradeSide, setSelectedOutcome, setTradeShares, positionPnl, playNotificationSound, onMarketClick }) => {
   const [isHistoryMinimized, setIsHistoryMinimized] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [sellThreshold, setSellThreshold] = useState(10);
@@ -134,7 +134,12 @@ const PortfolioView = memo(({ portfolio, prices, markets, setTradeModal, setTrad
             }
 
             return (
-              <div key={tid} style={{ padding: "10px 14px", borderBottom: "1px solid #0d1117", opacity: isExpired ? 0.6 : 1 }}>
+              <div 
+                key={tid} 
+                className="pos-row"
+                style={{ padding: "10px 14px", borderBottom: "1px solid #0d1117", opacity: isExpired ? 0.6 : 1 }}
+                onClick={() => market && onMarketClick(market.id)}
+              >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
                   <div>
                     <span className="badge" style={{ background: pos.outcome === "YES" ? "#064e3b" : "#450a0a", color: pos.outcome === "YES" ? "#6ee7b7" : "#fca5a5", marginRight: 6 }}>{pos.outcome}</span>
@@ -152,7 +157,8 @@ const PortfolioView = memo(({ portfolio, prices, markets, setTradeModal, setTrad
                       color: sellColor,
                       background: canSell ? "transparent" : "rgba(31, 41, 55, 0.2)"
                     }}
-                    onClick={() => { 
+                    onClick={(e) => { 
+                      e.stopPropagation(); // Prevent row click
                       if (!canSell) return;
                       setTradeModal(market || { question: pos.question, tokens: [tid], outcomes: [pos.outcome], outcome_prices: [String(currPrice)] }); 
                       setTradeSide("sell"); 

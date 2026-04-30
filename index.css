@@ -47,6 +47,9 @@ body {
 .mkt-row:hover { background: #111827 !important; cursor: pointer; }
 .mkt-row.selected { background: #1e293b !important; border-left: 2px solid var(--accent); }
 
+.pos-row { cursor: pointer; transition: background-color 0.15s; }
+.pos-row:hover { background: #111827 !important; }
+
 .btn-primary {
   background: var(--primary);
   border: none;

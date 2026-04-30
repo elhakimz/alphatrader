@@ -672,6 +672,7 @@ export default function PolymarketTrader() {
               portfolio={portfolio} prices={prices} markets={markets} setTradeModal={setTradeModal} 
               setTradeSide={setTradeSide} setSelectedOutcome={setSelectedOutcome} setTradeShares={setTradeShares} 
               positionPnl={stats.pnl} playNotificationSound={playNotificationSound}
+              onMarketClick={onMarketClick}
             />
           </div>
         </div>

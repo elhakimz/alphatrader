@@ -14,6 +14,8 @@ __pycache__/
 
 # Databases and User Data
 detector.db
+detector.db-shm
+detector.db-wal
 portfolios.json
 
 # Build and IDE
@@ -27,3 +29,6 @@ dist/
 !screenshots/*.png
 tasks/scratch/
 llms.txt
+autobrowse/
+test-results/
+copy_trading_test_failure.png

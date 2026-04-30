@@ -17,6 +17,12 @@ class CopyTradingEngine:
         self.resolution_task = None
         self.is_running = False
 
+    async def _log(self, level, msg):
+        """Helper to print and broadcast logs."""
+        print(f"[{level}] [Copy] {msg}")
+        if self.on_action:
+            asyncio.create_task(self.on_action({"type": "log", "level": level, "message": f"COPY: {msg}"}))
+
     async def start(self):
         """Start the background loops."""
         if self.is_running:
@@ -24,7 +30,7 @@ class CopyTradingEngine:
         self.is_running = True
         self.polling_task = asyncio.create_task(self._poll_loop())
         self.resolution_task = asyncio.create_task(self._resolution_loop())
-        print("[Copy] Engine started")
+        await self._log("INFO", "Engine started and loops initialized")
 
     async def stop(self):
         """Stop all background tasks."""
@@ -41,7 +47,7 @@ class CopyTradingEngine:
                 await self.resolution_task
         except asyncio.CancelledError:
             pass
-        print("[Copy] Engine stopped")
+        await self._log("INFO", "Engine stopped")
 
     async def sync_wallet(self, wallet_address: str):
         """Manually trigger a sync for a specific wallet."""
@@ -56,7 +62,7 @@ class CopyTradingEngine:
                     await asyncio.sleep(300)
                     continue
 
-                print(f"[Copy] Checking resolution for {len(unresolved)} trades...")
+                await self._log("DEBUG", f"Checking resolution for {len(unresolved)} trades...")
                 # Group by market_id to minimize API calls
                 mids = list(set(t["market_id"] for t in unresolved))
                 market_data = {}
@@ -145,7 +151,7 @@ class CopyTradingEngine:
                     wallets = [r[0] for r in rows]
 
                 if wallets:
-                    print(f"[Copy] Polling activity for {len(wallets)} wallets...")
+                    await self._log("DEBUG", f"Polling activity for {len(wallets)} wallets...")
                     for wallet in wallets:
                         await self._sync_wallet_activity(wallet)
 
@@ -315,6 +321,4 @@ class CopyTradingEngine:
                     )
                 )
 
-            print(
-                f"[Copy] EXECUTED: Mirroring {source_trade['source_wallet'][:8]} -> {copy_size} USDC on {source_trade['market_id'][:8]}"
-            )
+            await self._log("INFO", f"EXECUTED: Mirroring {source_trade['source_wallet'][:8]} -> {copy_size} USDC on {source_trade['market_id'][:8]}")
